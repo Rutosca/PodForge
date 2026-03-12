@@ -12,7 +12,8 @@ import uuid
 from supabase import create_client, Client # type: ignore
 from functools import wraps
 from utils.validators import is_valid_youtube_url
-
+import threading
+from rq import Worker
 # Inicializar Supabase con la llave maestra (Service Role)
 
 supabase: Client = create_client(Settings.SUPABASE_URL, Settings.SUPABASE_SERVICE_KEY)
@@ -385,6 +386,13 @@ if Settings.ENV != "development":
         return jsonify({"status": "disabled"}), 403
 
 
+
+def run_worker():
+    w = Worker([queue], connection=redis_conn)
+    w.work()
+
+worker_thread = threading.Thread(target=run_worker, daemon=True)
+worker_thread.start()
 # --- 3. ARRANQUE ---
 
 if __name__ == "__main__":
