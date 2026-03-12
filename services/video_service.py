@@ -1,0 +1,116 @@
+import os
+import subprocess
+import uuid
+import logging
+from config import Settings
+
+log = logging.getLogger(__name__)
+
+def trim_video_ffmpeg(source_video_id: str, start_time_sec: float, end_time_sec: float) -> str:
+    """
+    Usa FFmpeg para recortar un segmento exacto del video original.
+    Devuelve la ruta (nombre) del archivo final generado.
+    Por seguridad, evita generar archivos gigantescos limitando la duración de recorte a max 60 segundos.
+    """
+    
+    # 1. Seguridad extra contra ataques en la API
+    duration = end_time_sec - start_time_sec
+    if duration > 120: # Límite máximo generoso: 2 minutos por clip
+        raise ValueError("El clip supera el tiempo máximo permitido para recortar por seguridad (120s).")
+    
+    if start_time_sec < 0 or end_time_sec <= start_time_sec:
+        raise ValueError("Tiempos de recorte inválidos.")
+
+    # 2. Encontrar el archivo original
+    # Porque desconocemos la extensión exacta (.mp4, .webm, .mkv) del source
+    source_path = None
+    for ext in ['mp4', 'webm', 'mkv', 'm4a', 'ts', 'mov']:
+        test_path = os.path.join(Settings.TEMP_DIR, f"{source_video_id}.{ext}")
+        if os.path.exists(test_path):
+            source_path = test_path
+            break
+            
+    if not source_path:
+        raise FileNotFoundError("No se encontró el archivo de vídeo original en el servidor para recortarlo.")
+
+    # 3. Preparar archivo de salida
+    clip_id = str(uuid.uuid4())
+    output_filename = f"clip_{clip_id}.mp4"
+    output_path = os.path.join(Settings.TEMP_DIR, output_filename)
+
+    # 4. Construir comando FFmpeg
+    # Usamos -ss ANTES de -i para que sea un seek súper rápido (fast seek), luego definimos la -t (duration)
+    # Copiamos codecs (-c copy) si es posible para no recodificar, es 100x más rápido. 
+    # OJO: -c copy a veces da "saltos" al inicio si no cae en un keyframe, pero para esta prueba MVP es perfecto.
+    command = [
+        "ffmpeg", 
+        "-y", # Sobrescribir sin preguntar
+        "-ss", str(start_time_sec), # Start
+        "-t", str(duration), # Duration to cut
+        "-i", source_path, # Input
+        "-c", "copy", # No re-encode (super fast)
+        output_path
+    ]
+
+    log.info(f"🎬 Ejecutando FFmpeg: {' '.join(command)}")
+
+    try:
+        # Ejecutamos comando
+        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        log.info(f"✅ Clip generado en: {output_path}")
+        return output_filename
+        
+    except subprocess.CalledProcessError as e:
+        log.error(f"❌ Error en FFmpeg: {e.stderr}")
+        raise RuntimeError(f"Fallo al recortar vídeo: {e.stderr}")
+
+
+
+def trim_audio_ffmpeg(source_video_id: str, start_time_sec: float, end_time_sec: float) -> str:
+    """
+    Recorta un segmento de audio del archivo original.
+    Devuelve el nombre del archivo MP3 generado.
+    """
+    duration = end_time_sec - start_time_sec
+    if duration > 120:
+        raise ValueError("El clip supera el tiempo máximo permitido (120s).")
+    if start_time_sec < 0 or end_time_sec <= start_time_sec:
+        raise ValueError("Tiempos de recorte inválidos.")
+
+    # Buscar el archivo original (audio subido por el usuario)
+    source_path = None
+    for ext in ['mp3', 'm4a', 'wav', 'ogg', 'flac', 'aac', 'opus', 'weba', 'mp4', 'webm', 'mkv']:
+        test_path = os.path.join(Settings.TEMP_DIR, f"{source_video_id}.{ext}")
+        if os.path.exists(test_path):
+            source_path = test_path
+            break
+
+    if not source_path:
+        raise FileNotFoundError("No se encontró el archivo original en el servidor.")
+
+    clip_id = str(uuid.uuid4())
+    output_filename = f"audioclip_{clip_id}.mp3"
+    output_path = os.path.join(Settings.TEMP_DIR, output_filename)
+
+    command = [
+        "ffmpeg",
+        "-y",
+        "-ss", str(start_time_sec),
+        "-t", str(duration),
+        "-i", source_path,
+        "-vn",                      # sin vídeo
+        "-ar", "44100",             # sample rate estándar
+        "-ac", "2",                 # estéreo
+        "-b:a", "192k",             # bitrate decente
+        output_path
+    ]
+
+    log.info(f"🎵 Recortando audio: {' '.join(command)}")
+
+    try:
+        subprocess.run(command, capture_output=True, text=True, check=True)
+        log.info(f"✅ Audio clip generado: {output_path}")
+        return output_filename
+    except subprocess.CalledProcessError as e:
+        log.error(f"❌ Error FFmpeg (audio): {e.stderr}")
+        raise RuntimeError(f"Fallo al recortar audio: {e.stderr}")

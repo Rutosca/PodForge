@@ -1,0 +1,18 @@
+# Secretos y credenciales (VITAL)
+.env
+cookies.txt
+
+# Carpetas de datos y temporales
+temp/
+/shared_data
+*.mp3
+*.m4a
+*.mp4
+
+# Cosas de Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+node_modules/

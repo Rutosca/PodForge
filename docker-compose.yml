@@ -1,0 +1,49 @@
+services:
+  redis:
+    image: redis:alpine
+    container_name: mi-redis
+    ports:
+      - "6379:6379"
+
+  web:
+    build: .
+    container_name: mi-web
+    command: python app.py
+    ports:
+      - "5000:5000"
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - FLASK_DEBUG=1
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    volumes:
+      - .:/app
+      - ./cookies.txt:/app/cookies.txt
+      # 👇 ESTO ES LO NUEVO: Carpeta compartida
+      - shared_data:/app/data 
+
+  worker:
+    build: .
+    container_name: mi-worker
+    command: rq worker --url redis://redis:6379/0
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    volumes:
+      - .:/app
+      - ./cookies.txt:/app/cookies.txt
+      # 👇 EL WORKER TAMBIÉN LA VE
+      - shared_data:/app/data
+
+# Definimos el volumen
+volumes:
+  shared_data:
