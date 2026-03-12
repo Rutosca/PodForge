@@ -13,7 +13,7 @@ from supabase import create_client, Client # type: ignore
 from functools import wraps
 from utils.validators import is_valid_youtube_url
 import threading
-from rq import SimpleWorker  # SimpleWorker funciona en hilos secundarios; Worker solo en el hilo principal
+from rq import Worker  # SimpleWorker funciona en hilos secundarios; Worker solo en el hilo principal
 
 # Inicializar Supabase con la llave maestra (Service Role)
 supabase: Client = create_client(Settings.SUPABASE_URL, Settings.SUPABASE_SERVICE_KEY)
@@ -405,8 +405,20 @@ if Settings.ENV != "development":
 # SimpleWorker en vez de Worker porque Worker lanza ValueError al intentar
 # instalar signal handlers fuera del hilo principal del intérprete.
 
+# --- WORKER EN HILO ---
+from rq import Worker
+
+class ThreadSafeWorker(Worker):
+    """
+    Worker que no instala signal handlers.
+    Necesario para correr en un hilo secundario — los signals
+    solo funcionan en el hilo principal del intérprete.
+    """
+    def _install_signal_handlers(self):
+        pass  # No-op intencional
+
 def run_worker():
-    w = SimpleWorker([queue], connection=redis_conn)
+    w = ThreadSafeWorker([queue], connection=redis_conn)
     w.work()
 
 worker_thread = threading.Thread(target=run_worker, daemon=True)
