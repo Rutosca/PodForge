@@ -67,15 +67,21 @@ export async function uploadFile(file: File): Promise<JobResponse> {
 
   const authHeaders = await getAuthHeaders()
 
-  const res = await fetch('/api/subir', {
+  // Directo a Render, sin pasar por el proxy de Vercel
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+
+  const res = await fetch(`${apiUrl}/subir`, {
     method: 'POST',
     headers: { ...authHeaders },
     body: formData,
   })
 
   if (!res.ok) {
-    const data = await res.json()
-    throw new Error(data.error || `Error ${res.status}`)
+    let data: any = {}
+    try { data = await res.json() } catch {}
+    const err: any = new Error(data.error || `Error ${res.status}`)
+    err.needsLogin = data.needs_login === true
+    throw err
   }
 
   return res.json()
