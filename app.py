@@ -22,12 +22,30 @@ redis_conn = Redis.from_url(Settings.REDIS_URL)
 
 app = Flask(__name__)
 
-# CORS: orígenes permitidos, sin espacios por si acaso
-ALLOWED_ORIGINS = [o.strip() for o in os.getenv(
-    "ALLOWED_ORIGINS",
-    "http://localhost:3000,http://localhost:5000"
-).split(",")]
-CORS(app, resources={r"/*": {"origins": ALLOWED_ORIGINS}}, supports_credentials=True)
+# CORS: orígenes permitidos
+# Las preview URLs de Vercel cambian en cada deploy, así que usamos un patrón regex
+import re
+
+def _allowed_origin(origin):
+    """Verifica si un origen está permitido (soporta Vercel preview URLs dinámicas)."""
+    if not origin:
+        return False
+    
+    allowed_list = [o.strip() for o in os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:3000,http://localhost:5000"
+    ).split(",")]
+    
+    if origin in allowed_list:
+        return True
+    
+    # Permitir cualquier subdomain de vercel.app (preview deploys)
+    if re.match(r'https://.*\.vercel\.app$', origin):
+        return True
+    
+    return False
+
+CORS(app, resources={r"/*": {"origins": _allowed_origin}}, supports_credentials=True)
 
 limiter = Limiter(get_remote_address, app=app, storage_uri=Settings.REDIS_URL, default_limits=["30 per minute"])
 app.config.from_object(Settings)
