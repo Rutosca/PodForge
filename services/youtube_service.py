@@ -21,8 +21,9 @@ def get_ytdlp_config(cookie_path=None, video=False):
         'quiet': True,
         'no_warnings': True,
         'nocheckcertificate': True,
+        'impersonate': 'chrome',
         'socket_timeout': 30,
-        # Filtro brutal: yt-dlp aborta antes de descargar el 1% si la duración total excede el límite
+        # Aborta si la duración total excede el límite
         'match_filter': duration_filter,
         # Límite por tamaño
         'max_filesize': Settings.MAX_DOWNLOAD_MB * 1024 * 1024,
