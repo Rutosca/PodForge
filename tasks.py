@@ -24,7 +24,7 @@ supabase: Client = create_client(Settings.SUPABASE_URL, Settings.SUPABASE_SERVIC
 from services.youtube_service import download_video_and_audio
 
 def process_youtube(url, user_id, es_anonimo, language: str | None = "es"):
-
+    #buscar en caché de bases de datos
     try:
         log.info(f"Buscar en Supabase: {url}")
         cache = supabase.table('transcripciones').select('resultado_json').eq('url_o_nombre', url).execute()
@@ -35,10 +35,10 @@ def process_youtube(url, user_id, es_anonimo, language: str | None = "es"):
             
             return {
                 "status": "success",
-                "transcripcion": "Transcripción recuperada de caché", # Si guardas la transcripción en DB, ponla aquí
+                "transcripcion": "Transcripción recuperada de caché",
                 "resumen_contexto": radar.get("resumen_global_contexto", ""),
                 "clips": radar.get("clips", []),
-                "source_video_id": url.split('v=')[-1].split('&')[0], # Extraemos el ID chapuceramente de la URL
+                "source_video_id": url.split('v=')[-1].split('&')[0], 
                 "source_type": "youtube"
             }
     except Exception as e:
@@ -91,7 +91,7 @@ def process_file(file_path, user_id, es_anonimo, language: str | None = "es"):
             redis_conn.decr(f"free_trial:{user_id}")
         else:
             supabase.rpc('decrementar_uso_seguro', {'p_usuario_id': user_id}).execute()
-        log.error(f"💥Error crítico Archivo: {e}")
+        log.error(f"Error crítico Archivo: {e}")
         # Solo limpiar en caso de error fatal
         if os.path.exists(file_path):
             cleanup_files(file_path)
