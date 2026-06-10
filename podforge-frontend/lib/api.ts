@@ -121,6 +121,12 @@ export function pollUntilDone(
         onProgress(status)
 
         if (status.status === 'finished' && status.result) {
+          //Lanzar error si lo hay
+          if ((status.result as any).error) {
+            reject(new Error((status.result as any).error))
+            return
+          }
+          
           resolve(status.result)
           return
         }
