@@ -57,15 +57,14 @@ def _sanitize_cookies_file(path: str) -> str | None:
     Verifica y sanitiza el archivo de cookies.
     - Comprueba que existe y es un archivo (no un directorio vacío de Docker)
     - Convierte CRLF → LF (Windows → Linux)
-    - Logea diagnóstico detallado
-    Devuelve la ruta sanitizada o None si no es válido.
+    - Copia a ruta escribible (yt-dlp necesita escribir cookies actualizadas)
+    Devuelve la ruta de la copia escribible o None si no es válido.
     """
     if not os.path.exists(path):
         log.warning(f"COOKIES: {path} no existe")
         return None
     
     if os.path.isdir(path):
-        # Docker monta un directorio vacío cuando el archivo fuente no existe
         log.error(f"COOKIES: {path} es un DIRECTORIO, no un archivo. "
                   "Esto ocurre cuando cookies.txt no existe en el host y Docker lo monta como carpeta vacía.")
         return None
@@ -75,7 +74,6 @@ def _sanitize_cookies_file(path: str) -> str | None:
         log.error(f"COOKIES: {path} existe pero está vacío (0 bytes)")
         return None
     
-    # Leer y diagnosticar contenido
     with open(path, 'r', encoding='utf-8', errors='replace') as f:
         content = f.read()
     
@@ -88,16 +86,17 @@ def _sanitize_cookies_file(path: str) -> str | None:
         log.error("COOKIES: El archivo no contiene ninguna cookie válida")
         return None
     
-    # Sanitizar CRLF → LF (yt-dlp en Linux puede fallar con CRLF)
-    if has_crlf:
-        log.info("COOKIES: Convirtiendo CRLF → LF para compatibilidad Linux")
-        clean_content = content.replace('\r\n', '\n')
-        sanitized_path = os.path.join(Settings.TEMP_DIR, 'cookies_sanitized.txt')
-        with open(sanitized_path, 'w', encoding='utf-8') as f:
-            f.write(clean_content)
-        return sanitized_path
+    # Siempre copiar a ruta escribible:
+    # - yt-dlp ESCRIBE en el archivo de cookies (actualiza sesión)
+    # - Los Secret Files de Render (/etc/secrets/) son read-only
+    # - De paso sanitizamos CRLF → LF
+    clean_content = content.replace('\r\n', '\n')
+    writable_path = os.path.join(Settings.TEMP_DIR, 'cookies_writable.txt')
+    with open(writable_path, 'w', encoding='utf-8') as f:
+        f.write(clean_content)
     
-    return path
+    log.info(f"COOKIES: Copiadas a ruta escribible → {writable_path}")
+    return writable_path
 
 
 import base64
