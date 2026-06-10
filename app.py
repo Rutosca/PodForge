@@ -29,7 +29,7 @@ ALLOWED_ORIGINS = [o.strip() for o in os.getenv(
 ).split(",")]
 CORS(app, resources={r"/*": {"origins": ALLOWED_ORIGINS}}, supports_credentials=True)
 
-limiter = Limiter(get_remote_address, app=app, default_limits=["30 per minute"])
+limiter = Limiter(get_remote_address, app=app, storage_uri=Settings.REDIS_URL, default_limits=["30 per minute"])
 app.config.from_object(Settings)
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB máximo
 
@@ -407,6 +407,9 @@ if Settings.ENV != "development":
 
 # --- WORKER EN HILO ---
 from rq import Worker
+import logging as _logging
+
+_worker_log = _logging.getLogger("worker_thread")
 
 class ThreadSafeWorker(Worker):
     """
@@ -418,8 +421,13 @@ class ThreadSafeWorker(Worker):
         pass  # No-op intencional
 
 def run_worker():
-    w = ThreadSafeWorker([queue], connection=redis_conn)
-    w.work()
+    try:
+        _worker_log.info("🚀 Worker RQ arrancando en hilo secundario...")
+        w = ThreadSafeWorker([queue], connection=redis_conn)
+        _worker_log.info("✅ Worker RQ conectado a Redis y escuchando jobs")
+        w.work()
+    except Exception as e:
+        _worker_log.error(f"💀 WORKER RQ CRASHED: {e}", exc_info=True)
 
 worker_thread = threading.Thread(target=run_worker, daemon=True)
 worker_thread.start()

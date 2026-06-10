@@ -1,9 +1,12 @@
 import os
 import uuid
 import tempfile
+import logging
 import yt_dlp
 import traceback
 from config import Settings
+
+log = logging.getLogger(__name__)
 
 def get_ytdlp_config(cookie_path=None, video=False):
     # Límite muy estricto de duración: 2 horas (7200 segundos) para evitar ataques de videos infinitos
@@ -49,37 +52,44 @@ def _download_content(url: str, as_video: bool):
     file_id = str(uuid.uuid4())
     output_template = os.path.join(Settings.TEMP_DIR, f"{file_id}.%(ext)s")
 
+    log.info(f"📥 Iniciando descarga yt-dlp: {url} (video={as_video})")
+
     cookie_path = None
     env_cookie_file = os.getenv("YT_COOKIES_FILE")
     
     if env_cookie_file and os.path.exists(env_cookie_file):
         cookie_path = env_cookie_file
+        log.info(f"🍪 Usando cookies: {env_cookie_file}")
 
     opts = get_ytdlp_config(cookie_path, video=as_video)
     opts["outtmpl"] = output_template
 
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
-            # ydl.extract_info ejecutará primero el match_filter. Si falla, lanza excepción silenciosa en download=True pero devuelve mensaje
             info = ydl.extract_info(url, download=True)
             if not info:
+                log.warning("⚠️ yt-dlp devolvió info=None")
                 return None, "Video rechazado o no se pudo obtener información."
 
             filename = ydl.prepare_filename(info)
 
         if not os.path.exists(filename):
+            log.error(f"❌ yt-dlp finalizó pero el archivo no existe: {filename}")
             return None, "Error: yt-dlp finalizó pero no hay archivo."
 
+        log.info(f"✅ Descarga completada: {filename}")
         return filename, None
 
     except Exception as e:
         error_msg = str(e)
-        traza_completa = traceback.format_exc() # 👈 Esto pilla el error real
-        print(f"❌ Error yt-dlp DETALLADO:\n{traza_completa}")
+        traza_completa = traceback.format_exc()
+        # IMPORTANTE: log.error va a stderr → visible en Docker logs
+        # print() iba a stdout → capturado por RQ, invisible en docker logs
+        log.error(f"❌ Error yt-dlp DETALLADO:\n{traza_completa}")
         
         if "demasiado largo" in error_msg:
             return None, "Video rechazado por protección anti-abuso: Es demasiado largo."
-        return None, "Error de yt-dlp, mira la consola de Docker."
+        return None, f"Error de yt-dlp: {error_msg}"
 
 
 def download_audio(url: str):
