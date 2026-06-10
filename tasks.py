@@ -24,9 +24,30 @@ supabase: Client = create_client(Settings.SUPABASE_URL, Settings.SUPABASE_SERVIC
 from services.youtube_service import download_video_and_audio
 
 def process_youtube(url, user_id, es_anonimo, language: str | None = "es"):
+
+    try:
+        log.info(f"Buscar en Supabase: {url}")
+        cache = supabase.table('transcripciones').select('resultado_json').eq('url_o_nombre', url).execute()
+        
+        if cache.data and len(cache.data) > 0:
+            log.info("Video ya procesado.")
+            radar = cache.data[0]['resultado_json']
+            
+            return {
+                "status": "success",
+                "transcripcion": "Transcripción recuperada de caché", # Si guardas la transcripción en DB, ponla aquí
+                "resumen_contexto": radar.get("resumen_global_contexto", ""),
+                "clips": radar.get("clips", []),
+                "source_video_id": url.split('v=')[-1].split('&')[0], # Extraemos el ID chapuceramente de la URL
+                "source_type": "youtube"
+            }
+    except Exception as e:
+        log.warning(f"Error buscando en caché: {e}")
+
     raw_video = None
     try:
-        log.info(f"📥 Descargando YouTube (Vídeo max 720p para recortes): {url}")
+        
+        log.info(f"Descargando YouTube (Vídeo max 720p para recortes): {url}")
         # Descargamos video+audio. Pesa más pero es necesario para la Feature de Recorte
         raw_video, err = download_video_and_audio(url)
         if err:
@@ -37,18 +58,18 @@ def process_youtube(url, user_id, es_anonimo, language: str | None = "es"):
             log.error(f"❌ Fallo descarga: {err}")
             return {"error": err}
 
-        # Extraemos el ID del video del nombre del archivo (uuid)
+        # Extrae el ID del video del nombre del archivo (uuid)
         # El archivo queda en disco (TEMP_DIR) para que ffmpeg lo corte luego
         video_id = os.path.basename(raw_video).split('.')[0]
         
-        # Procesamos como siempre, pero pasamos el ID del video orig
+        # Procesa como siempre, pero pasa el ID del video original
         return _process_common(raw_video, user_id, "youtube", url, es_anonimo, language, source_video_id=video_id, source_type='video')
     except Exception as e:
         if es_anonimo:
             redis_conn.decr(f"free_trial:{user_id}")
         else:
             supabase.rpc('decrementar_uso_seguro', {'p_usuario_id': user_id}).execute()
-        log.error(f"💥Error crítico YouTube: {e}")
+        log.error(f"Error crítico YouTube: {e}")
         # Solo limpiamos si hubo error fatal. Si fue bien, se queda para ffmpeg
         if raw_video:
             cleanup_files(raw_video)
@@ -56,7 +77,7 @@ def process_youtube(url, user_id, es_anonimo, language: str | None = "es"):
 
 def process_file(file_path, user_id, es_anonimo, language: str | None = "es"):
     try:
-        log.info(f"📂 Procesando archivo local: {file_path}")
+        log.info(f"Procesando archivo local: {file_path}")
         video_id = os.path.basename(file_path).split('.')[0]
 
         # Detectar si es audio o vídeo por extensión
