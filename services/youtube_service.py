@@ -148,11 +148,15 @@ def _download_content(url: str, as_video: bool):
     if env_cookie_file:
         cookie_path = _sanitize_cookies_file(env_cookie_file)
     
-    # 2) Variable base64 (para plataformas cloud sin acceso a archivos)
+    # 2) Render Secret File (montado automáticamente en /etc/secrets/)
+    if not cookie_path:
+        cookie_path = _sanitize_cookies_file("/etc/secrets/cookies.txt")
+
+    # 3) Variable base64 (alternativa para plataformas sin secret files)
     if not cookie_path:
         cookie_path = _resolve_cookies_from_env()
     
-    # 3) Rutas por defecto (Docker volume mount / local)
+    # 4) Rutas por defecto (Docker volume mount / local)
     if not cookie_path:
         for candidate in ["/app/cookies.txt", "cookies.txt"]:
             result = _sanitize_cookies_file(candidate)
