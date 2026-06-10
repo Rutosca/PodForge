@@ -55,7 +55,7 @@ def process_youtube(url, user_id, es_anonimo, language: str | None = "es"):
                 redis_conn.decr(f"free_trial:{user_id}")
             else:
                 supabase.rpc('decrementar_uso_seguro', {'p_usuario_id': user_id}).execute()
-            log.error(f"❌ Fallo descarga: {err}")
+            log.error(f"Fallo descarga: {err}")
             return {"error": err}
 
         # Extrae el ID del video del nombre del archivo (uuid)
@@ -100,10 +100,10 @@ def process_file(file_path, user_id, es_anonimo, language: str | None = "es"):
 def _process_common(audio_path, user_id, tipo_fuente, url_o_nombre, es_anonimo, language: str | None = "es", source_video_id: str | None = None, source_type: str = 'video'):
     compressed_audio = None
     try:
-        log.info("🔨 Comprimiendo audio...")
+        log.info("Comprimiendo audio...")
         compressed_audio = compress_audio(audio_path)
 
-        log.info(f"📝 Transcribiendo con Deepgram (idioma: {language or 'auto'})...")
+        log.info(f"Transcribiendo con Deepgram (idioma: {language or 'auto'})...")
         transcription = transcribe_audio_deepgram(compressed_audio, language=language)
         
         if transcription.startswith("Error"):
@@ -111,10 +111,10 @@ def _process_common(audio_path, user_id, tipo_fuente, url_o_nombre, es_anonimo, 
                 redis_conn.decr(f"free_trial:{user_id}")
             else:
                 supabase.rpc('decrementar_uso_seguro', {'p_usuario_id': user_id}).execute()
-            log.error(f"❌ Fallo transcripción: {transcription}")
+            log.error(f"Fallo transcripción: {transcription}")
             return {"error": transcription}
 
-        log.info("🚀 Detectando clips virales (Fase 1)...")
+        log.info("Detectando clips virales (Fase 1)...")
         radar = detect_clips(transcription)
 
         # Guardar en DB para usuarios registrados
@@ -126,11 +126,11 @@ def _process_common(audio_path, user_id, tipo_fuente, url_o_nombre, es_anonimo, 
                     "url_o_nombre": url_o_nombre,
                     "resultado_json": radar
                 }).execute()
-                log.info("✅ ¡Éxito y guardado en DB para usuario registrado!")
+                log.info("¡Éxito y guardado en DB para usuario registrado!")
             except Exception as db_err:
-                log.error(f"⚠️ ALERTA: Fallo al guardar en Supabase. Error: {db_err}")
+                log.error(f"ALERTA: Fallo al guardar en Supabase. Error: {db_err}")
         else:
-            log.info("✅ ¡Éxito anónimo! (No se guarda en DB)")
+            log.info("¡Éxito anónimo! (No se guarda en DB)")
 
         return {
             "status": "success",
@@ -145,7 +145,7 @@ def _process_common(audio_path, user_id, tipo_fuente, url_o_nombre, es_anonimo, 
                 redis_conn.decr(f"free_trial:{user_id}")
         else:
             supabase.rpc('decrementar_uso_seguro', {'p_usuario_id': user_id}).execute()
-        log.error(f"💥 Error en process_common: {e}")
+        log.error(f"Error en process_common: {e}")
         return {"error": str(e)}
     finally:
         # Solo borramos el audio comprimido. El original lo guardamos para recortes (ffmpeg)
@@ -157,7 +157,7 @@ def process_clip_video(source_video_id: str, start_time: float, end_time: float,
     Usa el servicio de video para llamar a FFmpeg y devolver un nombre de archivo.
     """
     try:
-        log.info(f"✂️ Generando clip de video desde: {source_video_id} ({start_time} - {end_time})")
+        log.info(f"Generando clip de video desde: {source_video_id} ({start_time} - {end_time})")
         clip_filename = trim_video_ffmpeg(source_video_id, start_time, end_time)
         return {
             "status": "success",
@@ -165,7 +165,7 @@ def process_clip_video(source_video_id: str, start_time: float, end_time: float,
             "media_type": "video"
         }
     except Exception as e:
-        log.error(f"💥 Error generando clip de vídeo: {e}")
+        log.error(f"Error generando clip de vídeo: {e}")
         return {"error": str(e)}
 
 
@@ -182,5 +182,5 @@ def process_clip_audio(source_video_id: str, start_time: float, end_time: float,
             "media_type": "audio"
         }
     except Exception as e:
-        log.error(f"💥 Error generando clip de audio: {e}")
+        log.error(f"Error generando clip de audio: {e}")
         return {"error": str(e)}

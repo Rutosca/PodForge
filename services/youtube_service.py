@@ -31,20 +31,18 @@ def get_ytdlp_config(cookie_path=None, video=False):
         'force_ipv4': True, 
         
         'extractor_args': {
-            'youtube': {
-                # Cadena de fallback: yt-dlp prueba cada uno hasta que funcione.
-                # 'mweb' y 'mediaconnect' son los más resistentes a bloqueos de datacenter.
-                'player_client': ['mweb', 'android', 'mediaconnect'],
+            'youtube': { 
+                'player_client': [ 'web_embedded', 'ios'],
+                
             }
         }
     }
 
-    # --- PROXY (Bright Data, Smartproxy, Oxylabs, etc.) ---
-    # Formato: http://user:pass@host:port o socks5://user:pass@host:port
+    # --- PROXY 
     proxy_url = os.getenv("PROXY_URL")
     if proxy_url:
         config['proxy'] = proxy_url
-        log.info("🌐 Proxy configurado para yt-dlp")
+        log.info("Proxy configurado para yt-dlp")
 
     if cookie_path:
         config['cookiefile'] = cookie_path
