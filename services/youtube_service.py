@@ -22,25 +22,29 @@ def get_ytdlp_config(cookie_path=None, video=False):
         # Si pide vídeo, bajamos el MP4 más pequeño posible (max 720p) + audio. Si no, solo audio.
         'format': 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best' if video else 'bestaudio/best',
         'outtmpl': '%(id)s.%(ext)s',
-        'quiet': False,          # IMPORTANTE: False para que los errores de yt-dlp sean visibles en logs
-        'no_warnings': False,    # Mostrar warnings para diagnóstico
+        'quiet': False,
+        'no_warnings': False,
         'nocheckcertificate': True,
-        # 'impersonate' ELIMINADO — curl-cffi falla silenciosamente en Docker python:slim
-        # sin libcurl4-openssl-dev, provocando el error silencioso
         'socket_timeout': 30,
-        # Aborta si la duración total excede el límite
         'match_filter': duration_filter,
-        # Límite por tamaño
         'max_filesize': Settings.MAX_DOWNLOAD_MB * 1024 * 1024,
         'force_ipv4': True, 
         
         'extractor_args': {
             'youtube': {
-                'player_client': ['android'],
-                'player_skip': ['web', 'tv', 'ios']
+                # Cadena de fallback: yt-dlp prueba cada uno hasta que funcione.
+                # 'mweb' y 'mediaconnect' son los más resistentes a bloqueos de datacenter.
+                'player_client': ['mweb', 'android', 'mediaconnect'],
             }
         }
     }
+
+    # --- PROXY (Bright Data, Smartproxy, Oxylabs, etc.) ---
+    # Formato: http://user:pass@host:port o socks5://user:pass@host:port
+    proxy_url = os.getenv("PROXY_URL")
+    if proxy_url:
+        config['proxy'] = proxy_url
+        log.info("🌐 Proxy configurado para yt-dlp")
 
     if cookie_path:
         config['cookiefile'] = cookie_path
@@ -75,7 +79,7 @@ def _download_content(url: str, as_video: bool):
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
             if not info:
-                log.warning("⚠️ yt-dlp devolvió info=None")
+                log.warning("yt-dlp devolvió info=None")
                 return None, "Video rechazado o no se pudo obtener información."
 
             filename = ydl.prepare_filename(info)

@@ -10,6 +10,8 @@ RUN apt-get update && \
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+# Forzar la última versión de yt-dlp (la de PyPI suele ir detrás en parches de YouTube)
+RUN pip install --no-cache-dir --upgrade yt-dlp
 
 COPY . .
 
