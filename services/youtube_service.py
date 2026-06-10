@@ -19,11 +19,11 @@ def get_ytdlp_config(cookie_path=None, video=False):
         # Si pide vídeo, bajamos el MP4 más pequeño posible (max 720p) + audio. Si no, solo audio.
         'format': 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best' if video else 'bestaudio/best',
         'outtmpl': '%(id)s.%(ext)s',
-        'quiet': True,
-        'no_warnings': True,
+        'quiet': False,          # IMPORTANTE: False para que los errores de yt-dlp sean visibles en logs
+        'no_warnings': False,    # Mostrar warnings para diagnóstico
         'nocheckcertificate': True,
-        'impersonate': 'chrome',
-        'verbose': True,
+        # 'impersonate' ELIMINADO — curl-cffi falla silenciosamente en Docker python:slim
+        # sin libcurl4-openssl-dev, provocando el error silencioso
         'socket_timeout': 30,
         # Aborta si la duración total excede el límite
         'match_filter': duration_filter,

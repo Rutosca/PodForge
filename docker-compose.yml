@@ -38,6 +38,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - PYTHONUNBUFFERED=1
     volumes:
       - .:/app
       - ./cookies.txt:/app/cookies.txt
