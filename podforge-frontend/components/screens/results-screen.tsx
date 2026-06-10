@@ -27,7 +27,7 @@ export function ResultsScreen({ radarResult, videoUrl = '', canUseIdeas = false,
   const [selectedClip, setSelectedClip] = useState<Clip | null>(null)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
-  const clips = useMemo(() => radarResult.clips, [radarResult])
+  const clips = useMemo(() => radarResult.clips || [], [radarResult])
   const transcripcion = radarResult.transcripcion
   const resumenContexto = radarResult.resumen_contexto
 
