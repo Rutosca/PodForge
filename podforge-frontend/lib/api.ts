@@ -287,7 +287,7 @@ export async function generateCopy(
 
 export interface CreditsInfo {
   remaining: number
-  plan: 'FREE' | 'PRO'
+  plan: string
   unlimited: boolean
 }
 

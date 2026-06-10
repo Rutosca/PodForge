@@ -17,7 +17,7 @@ export function InputScreen({ onStartAnalysis, error }: InputScreenProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [url, setUrl] = useState('')
   const [file, setFile] = useState<File | null>(null)
-  const [inputMethod, setInputMethod] = useState<'url' | 'file'>('url')
+  const [inputMethod, setInputMethod] = useState<'url' | 'file'>('file')
 
   const isValidYouTubeUrl = (url: string) => {
     const pattern = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/|v\/)|youtu\.be\/)[\w-]+/
@@ -92,15 +92,14 @@ export function InputScreen({ onStartAnalysis, error }: InputScreenProps) {
         <div className="flex items-center gap-2 p-1 bg-secondary/50 rounded-lg mb-6">
           <button
             onClick={() => setInputMethod('url')}
+            disabled={true}
             className={cn(
-              "flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-sm font-medium transition-all",
-              inputMethod === 'url'
-                ? "bg-card text-foreground shadow-md"
-                : "text-muted-foreground hover:text-foreground"
+              "flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-xs sm:text-sm font-medium transition-all opacity-50 cursor-not-allowed"
             )}
+            title="Funcionalidad en mantenimiento"
           >
             <Play className="w-4 h-4" />
-            URL de YouTube
+            <span className="truncate">YouTube (En mantenimiento)</span>
           </button>
           <button
             onClick={() => setInputMethod('file')}

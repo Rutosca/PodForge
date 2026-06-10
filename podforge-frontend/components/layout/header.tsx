@@ -70,12 +70,12 @@ export function Header({ currentView, sidebarCollapsed }: HeaderProps) {
             className={cn(
               "flex items-center gap-2 px-3 py-1.5 rounded-full",
               "bg-secondary/80 border border-border",
-              plan === 'PRO' && "border-primary/30 bg-primary/10"
+              plan !== 'FREE' && "border-primary/30 bg-primary/10"
             )}
           >
             <Zap className={cn(
               "w-4 h-4",
-              plan === 'PRO' ? "text-primary" : "text-amber-400"
+              plan !== 'FREE' ? "text-primary" : "text-amber-400"
             )} />
             <span className="text-sm font-medium">
               {unlimited ? (
@@ -84,7 +84,7 @@ export function Header({ currentView, sidebarCollapsed }: HeaderProps) {
                 <>
                   <span className="text-foreground">{remaining}</span>
                   <span className="text-muted-foreground hidden sm:inline"> análisis</span>
-                  <span className="text-muted-foreground/70 text-xs ml-1">({plan})</span>
+                  <span className="text-muted-foreground/70 text-xs ml-1">({plan.replace('_', ' ')})</span>
                 </>
               )}
             </span>
@@ -110,7 +110,7 @@ export function Header({ currentView, sidebarCollapsed }: HeaderProps) {
               <DropdownMenuContent align="end" className="w-56">
                 <div className="px-3 py-2">
                   <p className="text-sm font-medium text-foreground truncate">{user.email}</p>
-                  <p className="text-xs text-muted-foreground">{plan === 'PRO' ? 'Plan Pro' : 'Plan Gratuito'}</p>
+                  <p className="text-xs text-muted-foreground">{plan !== 'FREE' ? `Plan ${plan.replace('_', ' ')}` : 'Plan Gratuito'}</p>
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="gap-2">

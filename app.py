@@ -39,11 +39,11 @@ CORS(app, resources={r"/*": {"origins": ALLOWED_ORIGINS}}, supports_credentials=
 
 limiter = Limiter(get_remote_address, app=app, storage_uri=Settings.REDIS_URL, default_limits=["30 per minute"])
 app.config.from_object(Settings)
-app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB máximo
+app.config['MAX_CONTENT_LENGTH'] = 600 * 1024 * 1024  # 600MB máximo
 
 os.makedirs(Settings.TEMP_DIR, exist_ok=True)
 
-MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", 500))
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", 600))
 
 def check_file_size(f):
     @wraps(f)
@@ -332,16 +332,20 @@ def consultar_creditos():
             user_id = user_response.user.id
 
             result = supabase.table('usage') \
-                .select('usos_totales, limite_plan') \
+                .select('usos_totales, limite_plan, plan_id') \
                 .eq('user_id', user_id) \
                 .single() \
                 .execute()
 
             if result.data:
                 remaining = max(0, result.data['limite_plan'] - result.data['usos_totales'])
+                
+                plan_id = result.data.get('plan_id')
+                plan_name = str(plan_id).upper() if plan_id else "FREE"
+
                 return jsonify({
                     "remaining": remaining,
-                    "plan": "PRO" if result.data['limite_plan'] > 10 else "FREE",
+                    "plan": plan_name,
                     "unlimited": result.data['limite_plan'] >= 9999
                 })
             else:
