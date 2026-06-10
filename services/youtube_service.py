@@ -2,6 +2,7 @@ import os
 import uuid
 import tempfile
 import yt_dlp
+import traceback
 from config import Settings
 
 def get_ytdlp_config(cookie_path=None, video=False):
@@ -22,6 +23,7 @@ def get_ytdlp_config(cookie_path=None, video=False):
         'no_warnings': True,
         'nocheckcertificate': True,
         'impersonate': 'chrome',
+        'verbose': True,
         'socket_timeout': 30,
         # Aborta si la duración total excede el límite
         'match_filter': duration_filter,
@@ -72,10 +74,12 @@ def _download_content(url: str, as_video: bool):
 
     except Exception as e:
         error_msg = str(e)
-        print(f"❌ Error yt-dlp: {error_msg}")
+        traza_completa = traceback.format_exc() # 👈 Esto pilla el error real
+        print(f"❌ Error yt-dlp DETALLADO:\n{traza_completa}")
+        
         if "demasiado largo" in error_msg:
             return None, "Video rechazado por protección anti-abuso: Es demasiado largo."
-        return None, f"Error yt-dlp: {error_msg}"
+        return None, "Error de yt-dlp, mira la consola de Docker."
 
 
 def download_audio(url: str):
