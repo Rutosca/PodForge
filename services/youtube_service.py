@@ -52,25 +52,116 @@ def get_ytdlp_config(cookie_path=None, video=False):
     return config
 
 
+def _sanitize_cookies_file(path: str) -> str | None:
+    """
+    Verifica y sanitiza el archivo de cookies.
+    - Comprueba que existe y es un archivo (no un directorio vacío de Docker)
+    - Convierte CRLF → LF (Windows → Linux)
+    - Logea diagnóstico detallado
+    Devuelve la ruta sanitizada o None si no es válido.
+    """
+    if not os.path.exists(path):
+        log.warning(f"COOKIES: {path} no existe")
+        return None
+    
+    if os.path.isdir(path):
+        # Docker monta un directorio vacío cuando el archivo fuente no existe
+        log.error(f"COOKIES: {path} es un DIRECTORIO, no un archivo. "
+                  "Esto ocurre cuando cookies.txt no existe en el host y Docker lo monta como carpeta vacía.")
+        return None
+    
+    size = os.path.getsize(path)
+    if size == 0:
+        log.error(f"COOKIES: {path} existe pero está vacío (0 bytes)")
+        return None
+    
+    # Leer y diagnosticar contenido
+    with open(path, 'r', encoding='utf-8', errors='replace') as f:
+        content = f.read()
+    
+    cookie_lines = [l for l in content.splitlines() if l.strip() and not l.startswith('#')]
+    has_crlf = '\r\n' in content
+    
+    log.info(f"COOKIES: {path} — {size} bytes, {len(cookie_lines)} cookies, CRLF={'SI' if has_crlf else 'NO'}")
+    
+    if len(cookie_lines) == 0:
+        log.error("COOKIES: El archivo no contiene ninguna cookie válida")
+        return None
+    
+    # Sanitizar CRLF → LF (yt-dlp en Linux puede fallar con CRLF)
+    if has_crlf:
+        log.info("COOKIES: Convirtiendo CRLF → LF para compatibilidad Linux")
+        clean_content = content.replace('\r\n', '\n')
+        sanitized_path = os.path.join(Settings.TEMP_DIR, 'cookies_sanitized.txt')
+        with open(sanitized_path, 'w', encoding='utf-8') as f:
+            f.write(clean_content)
+        return sanitized_path
+    
+    return path
+
+
+import base64
+
+def _resolve_cookies_from_env() -> str | None:
+    """
+    Decodifica cookies desde la variable de entorno YT_COOKIES_BASE64.
+    Esto permite inyectar cookies como secreto en plataformas cloud
+    sin necesidad de montar archivos.
+    """
+    b64 = os.getenv("YT_COOKIES_BASE64")
+    if not b64:
+        return None
+    
+    try:
+        content = base64.b64decode(b64).decode('utf-8')
+        cookie_lines = [l for l in content.splitlines() if l.strip() and not l.startswith('#')]
+        
+        if len(cookie_lines) == 0:
+            log.error("COOKIES (base64): La variable contiene datos pero ninguna cookie válida")
+            return None
+        
+        # Guardar como archivo temporal (yt-dlp necesita un path)
+        out_path = os.path.join(Settings.TEMP_DIR, 'cookies_from_env.txt')
+        # Siempre LF, nunca CRLF
+        clean = content.replace('\r\n', '\n')
+        with open(out_path, 'w', encoding='utf-8') as f:
+            f.write(clean)
+        
+        log.info(f"COOKIES (base64): Decodificadas {len(cookie_lines)} cookies → {out_path}")
+        return out_path
+    except Exception as e:
+        log.error(f"COOKIES (base64): Error decodificando — {e}")
+        return None
+
+
 def _download_content(url: str, as_video: bool):
     file_id = str(uuid.uuid4())
     output_template = os.path.join(Settings.TEMP_DIR, f"{file_id}.%(ext)s")
 
-    log.info(f"📥 Iniciando descarga yt-dlp: {url} (video={as_video})")
+    log.info(f"Iniciando descarga yt-dlp: {url} (video={as_video})")
 
     cookie_path = None
+    
+    # Prioridad de resolución de cookies:
+    # 1) Archivo apuntado por variable de entorno
     env_cookie_file = os.getenv("YT_COOKIES_FILE")
+    if env_cookie_file:
+        cookie_path = _sanitize_cookies_file(env_cookie_file)
     
-    # Prioridad: 1) variable de entorno, 2) ruta por defecto en Docker
-    if env_cookie_file and os.path.exists(env_cookie_file):
-        cookie_path = env_cookie_file
-    elif os.path.exists("/app/cookies.txt"):
-        cookie_path = "/app/cookies.txt"
+    # 2) Variable base64 (para plataformas cloud sin acceso a archivos)
+    if not cookie_path:
+        cookie_path = _resolve_cookies_from_env()
     
-    if cookie_path:
-        log.info(f"Usando cookies: {cookie_path}")
-    else:
-        log.warning("No se encontró archivo de cookies — YouTube puede bloquear la descarga")
+    # 3) Rutas por defecto (Docker volume mount / local)
+    if not cookie_path:
+        for candidate in ["/app/cookies.txt", "cookies.txt"]:
+            result = _sanitize_cookies_file(candidate)
+            if result:
+                cookie_path = result
+                break
+    
+    if not cookie_path:
+        log.warning("COOKIES: Ninguna fuente de cookies encontrada — YouTube probablemente bloqueará")
 
     opts = get_ytdlp_config(cookie_path, video=as_video)
     opts["outtmpl"] = output_template
