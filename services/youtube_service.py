@@ -57,9 +57,16 @@ def _download_content(url: str, as_video: bool):
     cookie_path = None
     env_cookie_file = os.getenv("YT_COOKIES_FILE")
     
+    # Prioridad: 1) variable de entorno, 2) ruta por defecto en Docker
     if env_cookie_file and os.path.exists(env_cookie_file):
         cookie_path = env_cookie_file
-        log.info(f"🍪 Usando cookies: {env_cookie_file}")
+    elif os.path.exists("/app/cookies.txt"):
+        cookie_path = "/app/cookies.txt"
+    
+    if cookie_path:
+        log.info(f"Usando cookies: {cookie_path}")
+    else:
+        log.warning("No se encontró archivo de cookies — YouTube puede bloquear la descarga")
 
     opts = get_ytdlp_config(cookie_path, video=as_video)
     opts["outtmpl"] = output_template
