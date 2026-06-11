@@ -56,7 +56,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Refrescar créditos e historial al cambiar sesión
   useEffect(() => {
     refreshCredits()
-    refreshHistory()
+    if (session) {
+      refreshHistory()
+    } else {
+      setRemoteHistory([])
+    }
   }, [session, refreshCredits, refreshHistory])
 
   const signIn = async (email: string, password: string) => {
