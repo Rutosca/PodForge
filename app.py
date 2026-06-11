@@ -234,6 +234,39 @@ def generar_copy(user_id, es_anonimo):
     try:
         from services.llm_service import generate_copy
         result = generate_copy(clip, transcripcion, resumen_contexto=resumen_contexto)
+
+        # Guardar el copy generado en la tabla copy_generado
+        if not es_anonimo and "error" not in result:
+            try:
+                # El frontend puede enviar el clip_id de Supabase si lo tiene
+                clip_id_supabase = data.get("clip_id")
+
+                # Si no lo tiene, intentar buscarlo por start_time + topic
+                if not clip_id_supabase:
+                    clip_lookup = supabase.table('clips') \
+                        .select('id') \
+                        .eq('id_usuario', user_id) \
+                        .eq('start_time', clip.get('start', '')) \
+                        .eq('topic', clip.get('topic', '')) \
+                        .limit(1) \
+                        .execute()
+                    if clip_lookup.data:
+                        clip_id_supabase = clip_lookup.data[0]['id']
+
+                if clip_id_supabase:
+                    supabase.table('copy_generado').insert({
+                        "clip_id": clip_id_supabase,
+                        "id_usuario": user_id,
+                        "titulo": result.get("titulo"),
+                        "caption": result.get("caption"),
+                        "hooks": result.get("hooks", []),
+                        "formato_recomendado": result.get("formato_recomendado"),
+                        "estructura_clip": result.get("estructura_clip", []),
+                    }).execute()
+                    log.info(f"Copy guardado en DB para clip {clip_id_supabase}")
+            except Exception as copy_err:
+                log.warning(f"No se pudo guardar copy en DB (no crítico): {copy_err}")
+
         return jsonify(result)
     except Exception as e:
         redis_conn.decr(regen_key)
@@ -333,8 +366,9 @@ def consultar_historial():
         user_response = supabase.auth.get_user(token)
         user_id = user_response.user.id
 
+        # JOIN con clips para usar datos normalizados (más fiable que el blob JSON)
         result = supabase.table('transcripciones') \
-            .select('id, created_at, tipo_fuente, url_o_nombre, resultado_json') \
+            .select('id, created_at, tipo_fuente, url_o_nombre, resultado_json, clips(id, topic, viral_score, start_time, end_time, clip_tipo)') \
             .eq('id_usuario', user_id) \
             .order('created_at', desc=True) \
             .limit(20) \
@@ -342,19 +376,25 @@ def consultar_historial():
 
         historial = []
         for row in (result.data or []):
+            clips_norm = row.get('clips') or []
             radar = row.get('resultado_json') or {}
-            clips = radar.get('clips', [])
-            top_clip = clips[0] if clips else None
-            title = top_clip.get('topic') if top_clip else None
-            if not title:
-                title = row.get('url_o_nombre') or 'Análisis sin título'
+
+            # Título: del clip con mayor viral_score en la tabla normalizada
+            if clips_norm:
+                best_clip = max(clips_norm, key=lambda c: c.get('viral_score', 0))
+                title = best_clip.get('topic') or row.get('url_o_nombre') or 'Análisis sin título'
+            else:
+                # Fallback al blob JSON para registros antiguos sin clips normalizados
+                clips_json = radar.get('clips', [])
+                title = clips_json[0].get('topic') if clips_json else None
+                title = title or row.get('url_o_nombre') or 'Análisis sin título'
 
             historial.append({
                 "id": str(row['id']),
                 "title": title,
                 "date": row['created_at'],
                 "status": "completed",
-                "clipsCount": len(clips),
+                "clipsCount": len(clips_norm) or len(radar.get('clips', [])),
                 "videoUrl": row.get('url_o_nombre') if row.get('tipo_fuente') == 'youtube' else None,
                 "resultado_json": radar,
             })
@@ -362,6 +402,7 @@ def consultar_historial():
         return jsonify({"historial": historial})
 
     except Exception as e:
+        log.error(f"Error en /historial: {e}")
         return jsonify({"error": str(e), "historial": []}), 500
 
 

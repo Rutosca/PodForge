@@ -120,17 +120,56 @@ def _process_common(audio_path, user_id, tipo_fuente, url_o_nombre, es_anonimo, 
         # Guardar en DB para usuarios registrados
         if not es_anonimo:
             try:
-                supabase.table('transcripciones').insert({
+                # 1. Insertar transcripción y obtener su ID
+                trans_result = supabase.table('transcripciones').insert({
                     "id_usuario": user_id,
                     "tipo_fuente": tipo_fuente,
                     "url_o_nombre": url_o_nombre,
                     "resultado_json": radar
                 }).execute()
-                log.info("¡Éxito y guardado en DB para usuario registrado!")
+
+                transcripcion_id = trans_result.data[0]['id'] if trans_result.data else None
+                log.info(f"Transcripción guardada con ID: {transcripcion_id}")
+
+                # 2. Insertar cada clip detectado en la tabla normalizada
+                if transcripcion_id:
+                    clips_raw = radar.get("clips", [])
+                    clips_to_insert = []
+                    for clip in clips_raw:
+                        factors = clip.get("factors", {})
+                        pf = clip.get("platform_fit", {})
+                        clips_to_insert.append({
+                            "transcripcion_id": transcripcion_id,
+                            "id_usuario": user_id,
+                            "start_time": clip.get("start", "00:00"),
+                            "end_time": clip.get("end", "00:00"),
+                            "duracion_segundos": clip.get("duration_seconds", 0),
+                            "topic": clip.get("topic", ""),
+                            "type": clip.get("type"),
+                            "clip_tipo": clip.get("clip_tipo"),
+                            "frase_clave": clip.get("frase_clave"),
+                            "viral_score": clip.get("viral_score", 0),
+                            "intensidad_hook": clip.get("intensidad_hook", 3),
+                            "factor_contradiction": factors.get("contradiction"),
+                            "factor_controversy": factors.get("controversy"),
+                            "factor_language": factors.get("language_intensity"),
+                            "factor_hook_clarity": factors.get("hook_clarity"),
+                            "factor_engagement": factors.get("engagement_potential"),
+                            "fit_tiktok": pf.get("tiktok"),
+                            "fit_instagram": pf.get("instagram"),
+                            "fit_youtube_shorts": pf.get("youtube_shorts"),
+                            "fit_twitter": pf.get("twitter"),
+                        })
+
+                    if clips_to_insert:
+                        supabase.table('clips').insert(clips_to_insert).execute()
+                        log.info(f"{len(clips_to_insert)} clips guardados en tabla 'clips'")
+
             except Exception as db_err:
                 log.error(f"ALERTA: Fallo al guardar en Supabase. Error: {db_err}")
         else:
             log.info("¡Éxito anónimo! (No se guarda en DB)")
+
 
         return {
             "status": "success",
