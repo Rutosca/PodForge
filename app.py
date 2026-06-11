@@ -318,6 +318,53 @@ def job_status(job_id):
     return jsonify({"status": "processing"})
 
 
+# --- HISTORIAL ---
+
+@app.route("/historial", methods=["GET"])
+@limiter.limit("30 per minute")
+def consultar_historial():
+    auth_header = request.headers.get('Authorization')
+
+    if not auth_header or auth_header in ("Bearer null", "Bearer undefined"):
+        return jsonify({"historial": []}), 200
+
+    token = auth_header.replace("Bearer ", "")
+    try:
+        user_response = supabase.auth.get_user(token)
+        user_id = user_response.user.id
+
+        result = supabase.table('transcripciones') \
+            .select('id, created_at, tipo_fuente, url_o_nombre, resultado_json') \
+            .eq('id_usuario', user_id) \
+            .order('created_at', desc=True) \
+            .limit(20) \
+            .execute()
+
+        historial = []
+        for row in (result.data or []):
+            radar = row.get('resultado_json') or {}
+            clips = radar.get('clips', [])
+            top_clip = clips[0] if clips else None
+            title = top_clip.get('topic') if top_clip else None
+            if not title:
+                title = row.get('url_o_nombre') or 'Análisis sin título'
+
+            historial.append({
+                "id": str(row['id']),
+                "title": title,
+                "date": row['created_at'],
+                "status": "completed",
+                "clipsCount": len(clips),
+                "videoUrl": row.get('url_o_nombre') if row.get('tipo_fuente') == 'youtube' else None,
+                "resultado_json": radar,
+            })
+
+        return jsonify({"historial": historial})
+
+    except Exception as e:
+        return jsonify({"error": str(e), "historial": []}), 500
+
+
 # --- CRÉDITOS ---
 
 @app.route("/creditos", methods=["GET"])

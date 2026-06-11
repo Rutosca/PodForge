@@ -303,3 +303,30 @@ export async function fetchCredits(): Promise<CreditsInfo> {
     return { remaining: 0, plan: 'FREE', unlimited: false }
   }
 }
+
+// ─── HISTORIAL DESDE SUPABASE ───
+
+export interface RemoteHistoryItem {
+  id: string
+  title: string
+  date: string
+  status: 'completed'
+  clipsCount: number
+  videoUrl?: string | null
+  resultado_json: RadarResult
+}
+
+export async function fetchHistorial(): Promise<RemoteHistoryItem[]> {
+  try {
+    const authHeaders = await getAuthHeaders()
+    if (!authHeaders['Authorization']) return []
+
+    const res = await fetch('/api/historial', { headers: authHeaders })
+    if (!res.ok) return []
+
+    const data = await res.json()
+    return data.historial || []
+  } catch {
+    return []
+  }
+}

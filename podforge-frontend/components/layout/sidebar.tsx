@@ -13,11 +13,13 @@ import {
   Menu,
   X,
   AlertCircle,
-  Trash2
+  Trash2,
+  Loader2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
+import type { RemoteHistoryItem } from '@/lib/api'
 
 // ─── Historial real con localStorage ───
 
@@ -88,6 +90,8 @@ interface SidebarProps {
   onSelectHistory: (item: AnalysisHistoryItem) => void
   collapsed: boolean
   onToggleCollapse: () => void
+  remoteHistory?: RemoteHistoryItem[]
+  isLoadingHistory?: boolean
 }
 
 function AnalysisItem({ item, collapsed, onSelect }: { item: AnalysisHistoryItem; collapsed: boolean; onSelect: (item: AnalysisHistoryItem) => void }) {
@@ -135,18 +139,30 @@ function AnalysisItem({ item, collapsed, onSelect }: { item: AnalysisHistoryItem
   )
 }
 
-export function Sidebar({ onNewAnalysis, onSelectHistory, collapsed, onToggleCollapse }: SidebarProps) {
+export function Sidebar({ onNewAnalysis, onSelectHistory, collapsed, onToggleCollapse, remoteHistory = [], isLoadingHistory = false }: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [history, setHistory] = useState<AnalysisHistoryItem[]>([])
+  const [localHistory, setLocalHistory] = useState<AnalysisHistoryItem[]>([])
 
-  // Cargar historial al montar y escuchar actualizaciones
+  // Cargar historial local al montar y escuchar actualizaciones
   useEffect(() => {
-    setHistory(getHistory())
+    setLocalHistory(getHistory())
 
-    const handleUpdate = () => setHistory(getHistory())
+    const handleUpdate = () => setLocalHistory(getHistory())
     window.addEventListener('podforge_history_update', handleUpdate)
     return () => window.removeEventListener('podforge_history_update', handleUpdate)
   }, [])
+
+  // Si hay historial remoto (usuario logueado), usarlo. Si no, usar localStorage.
+  const history: AnalysisHistoryItem[] = remoteHistory.length > 0
+    ? remoteHistory.map(r => ({
+        id: r.id,
+        title: r.title,
+        date: r.date,
+        status: r.status,
+        clipsCount: r.clipsCount,
+        videoUrl: r.videoUrl ?? undefined,
+      }))
+    : localHistory
 
   const sidebarContent = (
     <>
@@ -203,7 +219,7 @@ export function Sidebar({ onNewAnalysis, onSelectHistory, collapsed, onToggleCol
             </div>
             {history.length > 0 && (
               <button
-                onClick={() => { clearHistory(); setHistory([]) }}
+                onClick={() => { clearHistory(); setLocalHistory([]) }}
                 className="flex items-center gap-1 text-xs text-muted-foreground hover:text-red-400 transition-colors"
                 title="Limpiar historial"
               >
@@ -216,7 +232,13 @@ export function Sidebar({ onNewAnalysis, onSelectHistory, collapsed, onToggleCol
         
         <ScrollArea className="h-[calc(100vh-280px)]">
           <div className="space-y-2 pr-2">
-            {history.length === 0 && !collapsed && (
+            {isLoadingHistory && !collapsed && (
+              <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-xs">Cargando...</span>
+              </div>
+            )}
+            {!isLoadingHistory && history.length === 0 && !collapsed && (
               <p className="text-xs text-muted-foreground text-center py-8 opacity-60">
                 Aún no has analizado ningún video
               </p>
