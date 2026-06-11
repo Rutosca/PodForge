@@ -116,7 +116,13 @@ def _cobrar_credito():
         except Exception:
             return None, None, jsonify({"error": "Token inválido o expirado. Inicia sesión de nuevo."}), 401
 
-        resultado = supabase.rpc('incrementar_uso_si_posible', {'p_usuario_id': user_id}).execute()
+        resultado = None
+        try:
+            resultado = supabase.rpc('incrementar_uso_si_posible', {'p_usuario_id': user_id}).execute()
+        except Exception as rpc_err:
+            log.error(f"Error en RPC incrementar_uso: {rpc_err}")
+            return None, None, jsonify({"error": "Error interno al verificar créditos. Inténtalo de nuevo."}), 500
+
         if not resultado.data:
             return None, None, jsonify({"error": "Límite de usos alcanzado. Mejora tu plan."}), 402
 
@@ -366,35 +372,54 @@ def consultar_historial():
         user_response = supabase.auth.get_user(token)
         user_id = user_response.user.id
 
-        # JOIN con clips para usar datos normalizados (más fiable que el blob JSON)
-        result = supabase.table('transcripciones') \
-            .select('id, created_at, tipo_fuente, url_o_nombre, resultado_json, clips(id, topic, viral_score, start_time, end_time, clip_tipo)') \
+        # Paso 1: obtener transcripciones del usuario
+        trans_result = supabase.table('transcripciones') \
+            .select('id, created_at, tipo_fuente, url_o_nombre, resultado_json') \
             .eq('id_usuario', user_id) \
             .order('created_at', desc=True) \
             .limit(20) \
             .execute()
 
+        trans_rows = trans_result.data or []
+        if not trans_rows:
+            return jsonify({"historial": []})
+
+        # Paso 2: obtener clips normalizados para esas transcripciones
+        trans_ids = [row['id'] for row in trans_rows]
+        clips_result = supabase.table('clips') \
+            .select('transcripcion_id, topic, viral_score, clip_tipo') \
+            .in_('transcripcion_id', trans_ids) \
+            .execute()
+
+        # Agrupar clips por transcripcion_id
+        clips_by_trans: dict = {}
+        for clip in (clips_result.data or []):
+            tid = clip['transcripcion_id']
+            clips_by_trans.setdefault(tid, []).append(clip)
+
         historial = []
-        for row in (result.data or []):
-            clips_norm = row.get('clips') or []
+        for row in trans_rows:
+            tid = row['id']
+            clips_norm = clips_by_trans.get(tid, [])
             radar = row.get('resultado_json') or {}
 
-            # Título: del clip con mayor viral_score en la tabla normalizada
             if clips_norm:
                 best_clip = max(clips_norm, key=lambda c: c.get('viral_score', 0))
                 title = best_clip.get('topic') or row.get('url_o_nombre') or 'Análisis sin título'
+                count = len(clips_norm)
             else:
-                # Fallback al blob JSON para registros antiguos sin clips normalizados
+                # Fallback a blob JSON para registros anteriores
                 clips_json = radar.get('clips', [])
                 title = clips_json[0].get('topic') if clips_json else None
                 title = title or row.get('url_o_nombre') or 'Análisis sin título'
+                count = len(clips_json)
 
             historial.append({
-                "id": str(row['id']),
+                "id": str(tid),
                 "title": title,
                 "date": row['created_at'],
                 "status": "completed",
-                "clipsCount": len(clips_norm) or len(radar.get('clips', [])),
+                "clipsCount": count,
                 "videoUrl": row.get('url_o_nombre') if row.get('tipo_fuente') == 'youtube' else None,
                 "resultado_json": radar,
             })
