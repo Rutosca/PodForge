@@ -14,6 +14,10 @@ from functools import wraps
 from utils.validators import is_valid_youtube_url
 import threading
 from rq import Worker  # SimpleWorker funciona en hilos secundarios; Worker solo en el hilo principal
+import logging
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
 # Inicializar Supabase con la llave maestra (Service Role)
 supabase: Client = create_client(Settings.SUPABASE_URL, Settings.SUPABASE_SERVICE_KEY)
@@ -369,8 +373,12 @@ def consultar_historial():
 
     token = auth_header.replace("Bearer ", "")
     try:
-        user_response = supabase.auth.get_user(token)
-        user_id = user_response.user.id
+        try:
+            user_response = supabase.auth.get_user(token)
+            user_id = user_response.user.id
+        except Exception as auth_err:
+            log.warning(f"Token inválido en /historial: {auth_err}")
+            return jsonify({"error": "Token inválido", "historial": []}), 401
 
         # Paso 1: obtener transcripciones del usuario
         trans_result = supabase.table('transcripciones') \
@@ -440,10 +448,16 @@ def consultar_creditos():
 
     if auth_header and auth_header not in ("Bearer null", "Bearer undefined"):
         token = auth_header.replace("Bearer ", "")
+        
+        # 1. Verificar auth primero
         try:
             user_response = supabase.auth.get_user(token)
             user_id = user_response.user.id
+        except Exception as auth_err:
+            return jsonify({"remaining": 0, "plan": "FREE", "unlimited": False}), 401
 
+        # 2. Obtener usage
+        try:
             result = supabase.table('usage') \
                 .select('usos_totales, limite_plan, plan_id') \
                 .eq('user_id', user_id) \
@@ -464,8 +478,10 @@ def consultar_creditos():
             else:
                 return jsonify({"remaining": 5, "plan": "FREE", "unlimited": False})
 
-        except Exception:
-            return jsonify({"remaining": 0, "plan": "FREE", "unlimited": False}), 401
+        except Exception as db_err:
+            log.warning(f"Error al obtener créditos (usuario {user_id}): {db_err}")
+            # Si no hay fila en usage o falla la DB, devolver valores por defecto sin dar 401
+            return jsonify({"remaining": 5, "plan": "FREE", "unlimited": False}), 200
 
     else:
         client_ip = request.remote_addr
