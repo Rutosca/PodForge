@@ -378,7 +378,7 @@ def detect_clips(transcription: str) -> dict:
             log.info(f"🧠 Intento {attempt+1}: Escaneando clips con Gemini 2.5 Flash...")
 
             model = genai.GenerativeModel(
-                model_name="gemini-2.5-flash",
+                model_name="gemini-3.1-flash",
                 system_instruction=PROMPT_DETECTION,
                 generation_config=genai.GenerationConfig(
                     temperature=0.4,
@@ -491,7 +491,7 @@ def generate_copy(clip: dict, transcription: str, resumen_contexto: str = "") ->
             log.info(f"✍️ Generando copy — Intento {attempt+1}...")
 
             model = genai.GenerativeModel(
-                model_name="gemini-2.5-flash",
+                model_name="gemini-3.1-flash",
                 system_instruction=PROMPT_COPY,
                 generation_config=genai.GenerationConfig(
                     temperature=0.8,
@@ -667,7 +667,7 @@ def extract_ideas(transcription: str, resumen_contexto: str = "") -> dict:
             log.info(f"🧠 Idea Extraction — Intento {attempt+1}...")
 
             model = genai.GenerativeModel(
-                model_name="gemini-2.5-flash",
+                model_name="gemini-3.1-flash",
                 system_instruction=PROMPT_IDEAS,
                 generation_config=genai.GenerationConfig(
                     temperature=0.75,         # Más alto que Fase 1: necesitamos creatividad editorial
