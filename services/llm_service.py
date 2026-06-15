@@ -363,7 +363,7 @@ def calculate_viral_score(factors: dict, duration_seconds: int) -> int:
 def detect_clips(transcription: str) -> dict:
     """
     Fase 1 — Análisis determinista: detecta clips virales y calcula scores.
-    Motor: Gemini 2.5 Flash.
+    Motor: 
     """
     if not transcription:
         return _error_response("Transcripción vacía")
@@ -375,10 +375,10 @@ def detect_clips(transcription: str) -> dict:
 
     for attempt in range(MAX_RETRIES):
         try:
-            log.info(f"🧠 Intento {attempt+1}: Escaneando clips con Gemini 2.5 Flash...")
+            log.info(f"🧠 Intento {attempt+1}: Escaneando clips con Gemini...")
 
             model = genai.GenerativeModel(
-                model_name="gemini-3.1-flash",
+                model_name="gemini-3.5-flash",
                 system_instruction=PROMPT_DETECTION,
                 generation_config=genai.GenerationConfig(
                     temperature=0.4,
