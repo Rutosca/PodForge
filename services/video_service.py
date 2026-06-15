@@ -39,16 +39,17 @@ def trim_video_ffmpeg(source_video_id: str, start_time_sec: float, end_time_sec:
     output_path = os.path.join(Settings.TEMP_DIR, output_filename)
 
     # 4. Construir comando FFmpeg
-    # Usamos -ss ANTES de -i para que sea un seek súper rápido (fast seek), luego definimos la -t (duration)
-    # Copiamos codecs (-c copy) si es posible para no recodificar, es 100x más rápido. 
-    # OJO: -c copy a veces da "saltos" al inicio si no cae en un keyframe, pero para esta prueba MVP es perfecto.
+    # Para evitar el desajuste de audio/vídeo (desync) que ocurre al usar "-c copy",
+    # necesitamos re-codificar el fragmento usando libx264.
     command = [
         "ffmpeg", 
         "-y", # Sobrescribir sin preguntar
-        "-ss", str(start_time_sec), # Start
-        "-t", str(duration), # Duration to cut
+        "-ss", str(start_time_sec), # Start time (antes de -i para fast seek)
         "-i", source_path, # Input
-        "-c", "copy", # No re-encode (super fast)
+        "-t", str(duration), # Duration to cut (después de -i)
+        "-c:v", "libx264", # Re-encode video
+        "-preset", "superfast", # Codificación rápida
+        "-c:a", "aac", # Re-encode audio
         output_path
     ]
 
