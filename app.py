@@ -43,11 +43,11 @@ CORS(app, resources={r"/*": {"origins": ALLOWED_ORIGINS}}, supports_credentials=
 
 limiter = Limiter(get_remote_address, app=app, storage_uri=Settings.REDIS_URL, default_limits=["30 per minute"])
 app.config.from_object(Settings)
-app.config['MAX_CONTENT_LENGTH'] = 600 * 1024 * 1024  # 600MB máximo
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB máximo
 
 os.makedirs(Settings.TEMP_DIR, exist_ok=True)
 
-MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", 600))
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", 500))
 
 def check_file_size(f):
     @wraps(f)
@@ -189,11 +189,20 @@ def subir():
     filename = secure_filename(file.filename)
     unique_name = f"{uuid.uuid4()}_{filename}"
     file_path = os.path.join(Settings.TEMP_DIR, unique_name)
+    language = request.form.get("language", "es")
 
     try:
         file.save(file_path)
-        job = queue.enqueue(process_file, file_path, user_id, es_anonimo, job_timeout=600)
-
+        # Encolar tarea de procesamiento (añadiendo original_filename)
+        job = queue.enqueue(
+            process_file,
+            file_path,
+            user_id,
+            es_anonimo,
+            language,
+            original_filename=filename,
+            job_timeout='1h'
+        )
         return jsonify({
             "job_id": job.id,
             "status": "queued",
@@ -382,9 +391,9 @@ def consultar_historial():
 
         # Paso 1: obtener transcripciones del usuario
         trans_result = supabase.table('transcripciones') \
-            .select('id, created_at, tipo_fuente, url_o_nombre, resultado_json') \
+            .select('id, creado_en, tipo_fuente, url_o_nombre, resultado_json') \
             .eq('id_usuario', user_id) \
-            .order('created_at', desc=True) \
+            .order('creado_en', desc=True) \
             .limit(20) \
             .execute()
 
@@ -425,7 +434,7 @@ def consultar_historial():
             historial.append({
                 "id": str(tid),
                 "title": title,
-                "date": row['created_at'],
+                "date": row['creado_en'],
                 "status": "completed",
                 "clipsCount": count,
                 "videoUrl": row.get('url_o_nombre') if row.get('tipo_fuente') == 'youtube' else None,

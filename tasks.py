@@ -75,7 +75,7 @@ def process_youtube(url, user_id, es_anonimo, language: str | None = "es"):
             cleanup_files(raw_video)
         return {"error": str(e)}
 
-def process_file(file_path, user_id, es_anonimo, language: str | None = "es"):
+def process_file(file_path, user_id, es_anonimo, language: str | None = "es", original_filename: str | None = None):
     try:
         log.info(f"Procesando archivo local: {file_path}")
         video_id = os.path.basename(file_path).split('.')[0]
@@ -85,7 +85,20 @@ def process_file(file_path, user_id, es_anonimo, language: str | None = "es"):
         AUDIO_EXTENSIONS = {'.mp3', '.m4a', '.wav', '.ogg', '.flac', '.aac', '.opus', '.weba'}
         source_type = 'audio' if ext in AUDIO_EXTENSIONS else 'video'
 
-        return _process_common(file_path, user_id, "archivo", os.path.basename(file_path), es_anonimo, language, source_video_id=video_id, source_type=source_type)
+        # Usar el nombre original si existe, sino el generado (que incluye uuid)
+        cache_name = original_filename if original_filename else os.path.basename(file_path)
+
+        # Buscar en caché SOLO para este usuario (para evitar conflictos si 2 usuarios suben 'video.mp4')
+        if not es_anonimo:
+            log.info(f"Buscar en caché archivo: {cache_name} para usuario {user_id}")
+            cache = supabase.table('transcripciones').select('resultado_json').eq('id_usuario', user_id).eq('url_o_nombre', cache_name).execute()
+            if cache.data and len(cache.data) > 0:
+                log.info("✅ Caché encontrado en Supabase para el archivo.")
+                # Limpiar el archivo subido porque no lo vamos a usar
+                cleanup_files(file_path)
+                return cache.data[0]['resultado_json']
+
+        return _process_common(file_path, user_id, "archivo", cache_name, es_anonimo, language, source_video_id=video_id, source_type=source_type)
     except Exception as e:
         if es_anonimo:
             redis_conn.decr(f"free_trial:{user_id}")
