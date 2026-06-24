@@ -53,7 +53,7 @@ export function ClipPreviewModal({ clip, sourceVideoId, sourceType = 'video', vi
 
       const { job_id } = await generateVideoClip(currentSource, startTime, endTime, sourceType)
 
-      pollUntilDone(job_id, () => {}, 1000).promise
+      pollUntilDone(job_id, () => { }, 1000).promise
         .then((result: any) => {
           if (result && result.media_url) {
             setLocalMediaUrl(result.media_url)
@@ -92,7 +92,7 @@ export function ClipPreviewModal({ clip, sourceVideoId, sourceType = 'video', vi
         handleGenerateLocalMedia(clip, sourceVideoId)
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clip, isOpen, sourceVideoId])
 
   const handleLoopToggle = (checked: boolean) => {
@@ -258,7 +258,7 @@ export function ClipPreviewModal({ clip, sourceVideoId, sourceType = 'video', vi
           </div>
 
           <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-             {/* Key phrase */}
+            {/* Key phrase */}
             <blockquote className="border-l-2 border-primary pl-3 py-2 bg-primary/5 rounded-r flex-1 w-full">
               <p className="text-sm italic text-foreground/80">
                 &ldquo;{clip.frase_clave}&rdquo;
