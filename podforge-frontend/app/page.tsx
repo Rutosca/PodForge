@@ -25,7 +25,7 @@ export default function PodForgePage() {
   const [radarResult, setRadarResult] = useState<RadarResult | null>(null)
   const [videoUrl, setVideoUrl] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
-  const { refreshCredits, user, remoteHistory } = useAuth()
+  const { refreshCredits, refreshHistory, user, remoteHistory } = useAuth()
 
   const handleNewAnalysis = () => {
     setCurrentView('input')
@@ -108,6 +108,13 @@ export default function PodForgePage() {
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         remoteHistory={remoteHistory}
+        onClearRemoteHistory={async () => {
+          if (user) {
+            const { clearRemoteHistory } = await import('@/lib/api')
+            await clearRemoteHistory()
+            await refreshHistory()
+          }
+        }}
       />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto relative">

@@ -92,6 +92,7 @@ interface SidebarProps {
   onToggleCollapse: () => void
   remoteHistory?: RemoteHistoryItem[]
   isLoadingHistory?: boolean
+  onClearRemoteHistory?: () => Promise<void>
 }
 
 function AnalysisItem({ item, collapsed, onSelect }: { item: AnalysisHistoryItem; collapsed: boolean; onSelect: (item: AnalysisHistoryItem) => void }) {
@@ -139,7 +140,7 @@ function AnalysisItem({ item, collapsed, onSelect }: { item: AnalysisHistoryItem
   )
 }
 
-export function Sidebar({ onNewAnalysis, onSelectHistory, collapsed, onToggleCollapse, remoteHistory = [], isLoadingHistory = false }: SidebarProps) {
+export function Sidebar({ onNewAnalysis, onSelectHistory, collapsed, onToggleCollapse, remoteHistory = [], isLoadingHistory = false, onClearRemoteHistory }: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [localHistory, setLocalHistory] = useState<AnalysisHistoryItem[]>([])
 
@@ -219,7 +220,17 @@ export function Sidebar({ onNewAnalysis, onSelectHistory, collapsed, onToggleCol
             </div>
             {history.length > 0 && (
               <button
-                onClick={() => { clearHistory(); setLocalHistory([]) }}
+                onClick={async () => {
+                  if (onClearRemoteHistory && remoteHistory.length > 0) {
+                    try {
+                      await onClearRemoteHistory()
+                    } catch (e) {
+                      console.error(e)
+                    }
+                  } else {
+                    clearHistory(); setLocalHistory([])
+                  }
+                }}
                 className="flex items-center gap-1 text-xs text-muted-foreground hover:text-red-400 transition-colors"
                 title="Limpiar historial"
               >

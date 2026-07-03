@@ -378,7 +378,7 @@ def detect_clips(transcription: str) -> dict:
             log.info(f"🧠 Intento {attempt+1}: Escaneando clips con Gemini...")
 
             model = genai.GenerativeModel(
-                model_name="gemini-3.5-flash",
+                model_name="gemini-3.1-flash",
                 system_instruction=PROMPT_DETECTION,
                 generation_config=genai.GenerationConfig(
                     temperature=0.4,

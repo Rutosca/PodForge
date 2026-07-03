@@ -453,6 +453,24 @@ def consultar_historial():
         log.error(f"Error en /historial: {e}")
         return jsonify({"error": str(e), "historial": []}), 500
 
+@app.route("/historial", methods=["DELETE"])
+@limiter.limit("5 per minute")
+def borrar_historial():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or auth_header in ("Bearer null", "Bearer undefined"):
+        return jsonify({"status": "success"}), 200
+
+    token = auth_header.replace("Bearer ", "")
+    try:
+        user_response = supabase.auth.get_user(token)
+        user_id = user_response.user.id
+        
+        supabase.table('transcripciones').delete().eq('id_usuario', user_id).execute()
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        log.error(f"Error al borrar historial: {e}")
+        return jsonify({"error": str(e)}), 500
+
 
 # --- CRÉDITOS ---
 

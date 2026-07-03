@@ -330,3 +330,17 @@ export async function fetchHistorial(): Promise<RemoteHistoryItem[]> {
     return []
   }
 }
+
+export async function clearRemoteHistory(): Promise<void> {
+  const authHeaders = await getAuthHeaders()
+  if (!authHeaders['Authorization']) return
+
+  const res = await fetch('/api/historial', {
+    method: 'DELETE',
+    headers: authHeaders,
+  })
+  
+  if (!res.ok) {
+    throw new Error('Error al borrar historial remoto')
+  }
+}
