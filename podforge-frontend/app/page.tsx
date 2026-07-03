@@ -13,7 +13,6 @@ import type { RadarResult } from '@/lib/api'
 import { addToHistory, saveResult, loadResult } from '@/components/layout/sidebar'
 import type { AnalysisHistoryItem } from '@/components/layout/sidebar'
 import { useAuth } from '@/components/auth/auth-provider'
-import type { RadarResult } from '@/lib/api'
 
 type AppView = 'input' | 'processing' | 'results'
 

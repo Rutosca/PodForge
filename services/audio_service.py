@@ -23,5 +23,7 @@ def compress_audio(path: str):
             timeout=120  # 🔥 evita bloqueos
         )
         return output
-    except:
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Audio compression failed, using original: {e}")
         return path

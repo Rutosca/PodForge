@@ -16,5 +16,5 @@ def is_valid_youtube_url(url: str) -> bool:
         host = parsed.netloc.lower().split(":")[0]
         host = host.replace("www.", "")
         return host in VALID_DOMAINS
-    except:
+    except Exception:
         return False

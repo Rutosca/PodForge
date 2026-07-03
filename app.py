@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from tasks import queue, process_youtube, process_file, process_clip_video
 from rq.job import Job # type: ignore
@@ -12,8 +12,7 @@ import uuid
 from supabase import create_client, Client # type: ignore
 from functools import wraps
 from utils.validators import is_valid_youtube_url
-import threading
-from rq import Worker  # SimpleWorker funciona en hilos secundarios; Worker solo en el hilo principal
+
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -64,76 +63,83 @@ def check_file_size(f):
     return decorador
 
 
-def manejar_accesos(f):
-    @wraps(f)
-    def decorador(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-
-        if auth_header and auth_header != "Bearer null" and auth_header != "Bearer undefined":
-            token = auth_header.replace("Bearer ", "")
-            try:
-                user_response = supabase.auth.get_user(token)
-                user_id = user_response.user.id
-            except Exception:
-                return jsonify({"error": "Token inválido o expirado. Inicia sesión de nuevo."}), 401
-
-            resultado = supabase.rpc('incrementar_uso_si_posible', {'p_usuario_id': user_id}).execute()
-            if not resultado.data:
-                return jsonify({"error": "Límite de usos alcanzado. Mejora tu plan."}), 402
-
-            return f(user_id=user_id, es_anonimo=False, *args, **kwargs)
-
-        else:
-            client_ip = request.remote_addr
-            redis_key = f"free_trial:{client_ip}"
-            usos_actuales = redis_conn.incr(redis_key)
-            if usos_actuales == 1:
-                redis_conn.expire(redis_key, 2592000)
-
-            LIMITE_ANONIMO = 3
-            if usos_actuales > LIMITE_ANONIMO:
-                redis_conn.decr(redis_key)
-                return jsonify({
-                    "error": "¡Has visto el potencial! Regístrate gratis para seguir creando.",
-                    "needs_login": True
-                }), 402
-
-            return f(user_id=client_ip, es_anonimo=True, *args, **kwargs)
-
-    return decorador
-
-
-def _cobrar_credito():
+def manejar_accesos(f=None, *, cobrar=True):
     """
-    Verifica acceso y cobra 1 crédito. Se llama DESPUÉS de validar el archivo
+    Decorador de autenticación y control de acceso.
+
+    Uso:
+        @manejar_accesos          → autentica Y cobra crédito
+        @manejar_accesos(cobrar=False) → solo autentica (el cobro se hace manualmente después)
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            auth_header = request.headers.get('Authorization')
+
+            if auth_header and auth_header not in ("Bearer null", "Bearer undefined"):
+                token = auth_header.replace("Bearer ", "")
+                try:
+                    user_response = supabase.auth.get_user(token)
+                    user_id = user_response.user.id
+                except Exception:
+                    return jsonify({"error": "Token inválido o expirado. Inicia sesión de nuevo."}), 401
+
+                if cobrar:
+                    try:
+                        resultado = supabase.rpc('incrementar_uso_si_posible', {'p_usuario_id': user_id}).execute()
+                    except Exception as rpc_err:
+                        log.error(f"Error en RPC incrementar_uso: {rpc_err}")
+                        return jsonify({"error": "Error interno al verificar créditos. Inténtalo de nuevo."}), 500
+                    if not resultado.data:
+                        return jsonify({"error": "Límite de usos alcanzado. Mejora tu plan."}), 402
+
+                return func(user_id=user_id, es_anonimo=False, *args, **kwargs)
+
+            else:
+                client_ip = request.remote_addr
+
+                if cobrar:
+                    redis_key = f"free_trial:{client_ip}"
+                    usos_actuales = redis_conn.incr(redis_key)
+                    if usos_actuales == 1:
+                        redis_conn.expire(redis_key, 2592000)
+
+                    LIMITE_ANONIMO = 3
+                    if usos_actuales > LIMITE_ANONIMO:
+                        redis_conn.decr(redis_key)
+                        return jsonify({
+                            "error": "¡Has visto el potencial! Regístrate gratis para seguir creando.",
+                            "needs_login": True
+                        }), 402
+
+                return func(user_id=client_ip, es_anonimo=True, *args, **kwargs)
+
+        return wrapper
+
+    if f is not None:
+        # Called as @manejar_accesos (without parentheses) — backwards compatible
+        return decorator(f)
+    # Called as @manejar_accesos(cobrar=False)
+    return decorator
+
+
+def _cobrar_credito(user_id, es_anonimo):
+    """
+    Cobra 1 crédito. Se llama DESPUÉS de validar el archivo
     para evitar gastar créditos en subidas fallidas.
-    Retorna (user_id, es_anonimo, None, None) si OK,
-    o (None, None, response, code) si debe bloquearse.
+    Retorna (None, None) si OK, o (response, code) si debe bloquearse.
     """
-    auth_header = request.headers.get('Authorization')
-
-    if auth_header and auth_header not in ("Bearer null", "Bearer undefined"):
-        token = auth_header.replace("Bearer ", "")
-        try:
-            user_response = supabase.auth.get_user(token)
-            user_id = user_response.user.id
-        except Exception:
-            return None, None, jsonify({"error": "Token inválido o expirado. Inicia sesión de nuevo."}), 401
-
-        resultado = None
+    if not es_anonimo:
         try:
             resultado = supabase.rpc('incrementar_uso_si_posible', {'p_usuario_id': user_id}).execute()
         except Exception as rpc_err:
             log.error(f"Error en RPC incrementar_uso: {rpc_err}")
-            return None, None, jsonify({"error": "Error interno al verificar créditos. Inténtalo de nuevo."}), 500
-
+            return jsonify({"error": "Error interno al verificar créditos. Inténtalo de nuevo."}), 500
         if not resultado.data:
-            return None, None, jsonify({"error": "Límite de usos alcanzado. Mejora tu plan."}), 402
+            return jsonify({"error": "Límite de usos alcanzado. Mejora tu plan."}), 402
+        return None, None
 
-        return user_id, False, None, None
-
-    client_ip = request.remote_addr
-    redis_key = f"free_trial:{client_ip}"
+    redis_key = f"free_trial:{user_id}"
     usos_actuales = redis_conn.incr(redis_key)
     if usos_actuales == 1:
         redis_conn.expire(redis_key, 2592000)
@@ -141,12 +147,12 @@ def _cobrar_credito():
     LIMITE_ANONIMO = 3
     if usos_actuales > LIMITE_ANONIMO:
         redis_conn.decr(redis_key)
-        return None, None, jsonify({
+        return jsonify({
             "error": "¡Has visto el potencial! Regístrate gratis para seguir creando.",
             "needs_login": True
         }), 402
 
-    return client_ip, True, None, None
+    return None, None
 
 
 @app.route("/transformar", methods=["POST"])
@@ -171,7 +177,8 @@ def transformar(user_id, es_anonimo):
 @app.route("/subir", methods=["POST"])
 @limiter.limit("3 per minute")
 @check_file_size
-def subir():
+@manejar_accesos(cobrar=False)
+def subir(user_id, es_anonimo):
     # Paso 1: validar archivo ANTES de cobrar crédito
     if 'file' not in request.files:
         return jsonify({"error": "No hay archivo"}), 400
@@ -181,7 +188,7 @@ def subir():
         return jsonify({"error": "Nombre vacío"}), 400
 
     # Paso 2: cobrar crédito solo si el archivo llegó
-    user_id, es_anonimo, err_response, err_code = _cobrar_credito()
+    err_response, err_code = _cobrar_credito(user_id, es_anonimo)
     if err_response is not None:
         return err_response, err_code
 
@@ -193,7 +200,6 @@ def subir():
 
     try:
         file.save(file_path)
-        # Encolar tarea de procesamiento (añadiendo original_filename)
         job = queue.enqueue(
             process_file,
             file_path,
@@ -220,7 +226,7 @@ MAX_REGEN_PER_CLIP = 3
 @limiter.limit("5 per minute")
 @manejar_accesos
 def generar_copy(user_id, es_anonimo):
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Se requiere JSON con 'clip' y 'transcripcion'"}), 400
 
@@ -311,7 +317,7 @@ def extraer_ideas(user_id, es_anonimo):
                 "message": "El Idea Extraction Engine está disponible en el plan Studio o superior."
             }), 403
 
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Se requiere JSON con 'transcripcion'"}), 400
 
@@ -507,7 +513,7 @@ def consultar_creditos():
 @limiter.limit("10 per minute")
 @manejar_accesos
 def generar_video_clip(user_id, es_anonimo):
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "JSON requerido"}), 400
 
@@ -536,12 +542,9 @@ def generar_video_clip(user_id, es_anonimo):
     return jsonify({"job_id": job.id, "status": "queued", "message": "Recortando vídeo..."})
 
 
-from flask import send_from_directory
-import werkzeug.utils
-
 @app.route("/media/<filename>", methods=["GET"])
 def serve_media(filename):
-    safe_filename = werkzeug.utils.secure_filename(filename)
+    safe_filename = secure_filename(filename)
     return send_from_directory(Settings.TEMP_DIR, safe_filename)
 
 
@@ -551,36 +554,6 @@ if Settings.ENV != "development":
         return jsonify({"status": "disabled"}), 403
 
 
-# --- WORKER EN HILO ---
-# SimpleWorker en vez de Worker porque Worker lanza ValueError al intentar
-# instalar signal handlers fuera del hilo principal del intérprete.
-
-# --- WORKER EN HILO ---
-from rq import Worker
-import logging as _logging
-
-_worker_log = _logging.getLogger("worker_thread")
-
-class ThreadSafeWorker(Worker):
-    """
-    Worker que no instala signal handlers.
-    Necesario para correr en un hilo secundario — los signals
-    solo funcionan en el hilo principal del intérprete.
-    """
-    def _install_signal_handlers(self):
-        pass  # No-op intencional
-
-def run_worker():
-    try:
-        _worker_log.info("🚀 Worker RQ arrancando en hilo secundario...")
-        w = ThreadSafeWorker([queue], connection=redis_conn)
-        _worker_log.info("✅ Worker RQ conectado a Redis y escuchando jobs")
-        w.work()
-    except Exception as e:
-        _worker_log.error(f"💀 WORKER RQ CRASHED: {e}", exc_info=True)
-
-worker_thread = threading.Thread(target=run_worker, daemon=True)
-worker_thread.start()
 
 # --- ARRANQUE ---
 

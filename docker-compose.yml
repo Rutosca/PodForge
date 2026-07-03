@@ -22,7 +22,6 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     volumes:
       - .:/app
-      - ./cookies.txt:/app/cookies.txt
       # 👇 ESTO ES LO NUEVO: Carpeta compartida
       - shared_data:/app/data 
 
@@ -41,7 +40,6 @@ services:
       - PYTHONUNBUFFERED=1
     volumes:
       - .:/app
-      - ./cookies.txt:/app/cookies.txt
       # 👇 EL WORKER TAMBIÉN LA VE
       - shared_data:/app/data
 
