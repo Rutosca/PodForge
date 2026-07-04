@@ -1,4 +1,6 @@
 from flask import Flask, request, jsonify, send_from_directory
+import threading
+from rq import Worker
 from flask_cors import CORS
 from tasks import queue, process_youtube, process_file, process_clip_video
 from rq.job import Job # type: ignore
@@ -573,7 +575,32 @@ if Settings.ENV != "development":
 
 
 
-# --- ARRANQUE ---
+# --- ARRANQUE Y WORKER INTEGRADO ---
+
+# IMPORTANTE: Para que funcione en un entorno monolítico (como Render Web Service sin Background Worker extra)
+# levantamos un worker de RQ en un hilo en segundo plano dentro del mismo proceso de Flask.
+
+import logging as _logging
+_worker_log = _logging.getLogger("rq.worker")
+
+class ThreadSafeWorker(Worker):
+    def execute_job(self, job, queue):
+        try:
+            super().execute_job(job, queue)
+        except Exception as e:
+            _worker_log.error(f"Error en worker embebido ejecutando {job.id}: {e}")
+
+def run_worker():
+    with app.app_context():
+        try:
+            worker = ThreadSafeWorker([queue], connection=redis_conn)
+            worker.work(with_scheduler=True)
+        except Exception as e:
+            _worker_log.error(f"Worker thread crashed: {e}")
+
+worker_thread = threading.Thread(target=run_worker, daemon=True)
+worker_thread.start()
+
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000)

@@ -18,3 +18,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ historial: [] }, { status: 502 })
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+
+  const headers = new Headers()
+  const authorization = req.headers.get('authorization')
+  if (authorization) headers.set('authorization', authorization)
+
+  try {
+    const response = await fetch(`${apiUrl}/historial`, { 
+      method: 'DELETE',
+      headers 
+    })
+    const data = await response.json()
+    return NextResponse.json(data, { status: response.status })
+  } catch (error: any) {
+    console.error('[/api/historial] Error al conectar con Flask:', error?.message)
+    return NextResponse.json({ error: error?.message }, { status: 502 })
+  }
+}
