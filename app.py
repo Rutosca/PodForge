@@ -594,7 +594,7 @@ def run_worker():
     with app.app_context():
         try:
             worker = ThreadSafeWorker([queue], connection=redis_conn)
-            worker.work(with_scheduler=True)
+            worker.work(with_scheduler=True, disable_default_signal_handlers=True)
         except Exception as e:
             _worker_log.error(f"Worker thread crashed: {e}")
 
