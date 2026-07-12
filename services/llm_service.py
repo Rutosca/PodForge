@@ -1,5 +1,6 @@
 # services/llm_service.py
-import google.generativeai as genai  # type: ignore
+from google import genai
+from google.genai import types
 import json
 import logging
 import os
@@ -7,8 +8,9 @@ import os
 log = logging.getLogger(__name__)
 api_key = os.getenv("GEMINI_API_KEY")
 if api_key:
-    genai.configure(api_key=api_key)
+    client = genai.Client(api_key=api_key)
 else:
+    client = None
     log.error("CRÍTICO: No se encontró GEMINI_API_KEY en el entorno.")
 
 
@@ -377,18 +379,15 @@ def detect_clips(transcription: str) -> dict:
         try:
             log.info(f"🧠 Intento {attempt+1}: Escaneando clips con Gemini...")
 
-            model = genai.GenerativeModel(
-                model_name="gemini-3.5-flash",
-                system_instruction=PROMPT_DETECTION,
-                generation_config=genai.GenerationConfig(
+            response = client.models.generate_content(
+                model="gemini-3.5-flash",
+                contents=transcription,
+                config=types.GenerateContentConfig(
+                    system_instruction=PROMPT_DETECTION,
                     temperature=0.4,
                     response_mime_type="application/json",
-                )
-            )
-
-            response = model.generate_content(
-                transcription,
-                request_options={"timeout": 120},
+                    http_options=types.HttpOptions(timeout=120000),
+                ),
             )
             data = json.loads(response.text)
             log.info("✅ Detección de clips completada")
@@ -493,18 +492,15 @@ def generate_copy(clip: dict, transcription: str, resumen_contexto: str = "") ->
         try:
             log.info(f"✍️ Generando copy — Intento {attempt+1}...")
 
-            model = genai.GenerativeModel(
-                model_name="gemini-3.1-flash",
-                system_instruction=PROMPT_COPY,
-                generation_config=genai.GenerationConfig(
+            response = client.models.generate_content(
+                model="gemini-3.1-flash",
+                contents=context,
+                config=types.GenerateContentConfig(
+                    system_instruction=PROMPT_COPY,
                     temperature=0.8,
                     response_mime_type="application/json",
-                )
-            )
-
-            response = model.generate_content(
-                context,
-                request_options={"timeout": 120},
+                    http_options=types.HttpOptions(timeout=120000),
+                ),
             )
             data = json.loads(response.text)
 
@@ -672,18 +668,15 @@ def extract_ideas(transcription: str, resumen_contexto: str = "") -> dict:
         try:
             log.info(f"🧠 Idea Extraction — Intento {attempt+1}...")
 
-            model = genai.GenerativeModel(
-                model_name="gemini-3.1-flash",
-                system_instruction=PROMPT_IDEAS,
-                generation_config=genai.GenerationConfig(
-                    temperature=0.75,         # Más alto que Fase 1: necesitamos creatividad editorial
+            response = client.models.generate_content(
+                model="gemini-3.1-flash",
+                contents=contexto,
+                config=types.GenerateContentConfig(
+                    system_instruction=PROMPT_IDEAS,
+                    temperature=0.75,
                     response_mime_type="application/json",
-                )
-            )
-
-            response = model.generate_content(
-                contexto,
-                request_options={"timeout": 120},
+                    http_options=types.HttpOptions(timeout=120000),
+                ),
             )
             data = json.loads(response.text)
 
