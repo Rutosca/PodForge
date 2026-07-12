@@ -3,6 +3,7 @@ import subprocess
 import uuid
 import logging
 from config import Settings
+from services.storage_service import download_source_file
 
 log = logging.getLogger(__name__)
 
@@ -23,13 +24,20 @@ def trim_video_ffmpeg(source_video_id: str, start_time_sec: float, end_time_sec:
 
     # 2. Encontrar el archivo original
     # Porque desconocemos la extensión exacta (.mp4, .webm, .mkv) del source
+    video_extensions = ['mp4', 'webm', 'mkv', 'm4a', 'ts', 'mov']
     source_path = None
-    for ext in ['mp4', 'webm', 'mkv', 'm4a', 'ts', 'mov']:
+    for ext in video_extensions:
         test_path = os.path.join(Settings.TEMP_DIR, f"{source_video_id}.{ext}")
         if os.path.exists(test_path):
             source_path = test_path
             break
-            
+
+    # Fallback: si el contenedor se redesplegó y el disco local se vació,
+    # intenta recuperar el original desde el respaldo en Supabase Storage.
+    if not source_path:
+        log.info(f"No está en disco local, probando recuperar de Storage: {source_video_id}")
+        source_path = download_source_file(source_video_id, video_extensions)
+
     if not source_path:
         raise FileNotFoundError("No se encontró el archivo de vídeo original en el servidor para recortarlo.")
 
@@ -79,12 +87,17 @@ def trim_audio_ffmpeg(source_video_id: str, start_time_sec: float, end_time_sec:
         raise ValueError("Tiempos de recorte inválidos.")
 
     # Buscar el archivo original (audio subido por el usuario)
+    audio_extensions = ['mp3', 'm4a', 'wav', 'ogg', 'flac', 'aac', 'opus', 'weba', 'mp4', 'webm', 'mkv']
     source_path = None
-    for ext in ['mp3', 'm4a', 'wav', 'ogg', 'flac', 'aac', 'opus', 'weba', 'mp4', 'webm', 'mkv']:
+    for ext in audio_extensions:
         test_path = os.path.join(Settings.TEMP_DIR, f"{source_video_id}.{ext}")
         if os.path.exists(test_path):
             source_path = test_path
             break
+
+    if not source_path:
+        log.info(f"No está en disco local, probando recuperar de Storage: {source_video_id}")
+        source_path = download_source_file(source_video_id, audio_extensions)
 
     if not source_path:
         raise FileNotFoundError("No se encontró el archivo original en el servidor.")

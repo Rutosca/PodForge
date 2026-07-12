@@ -12,6 +12,7 @@ from services.llm_service import detect_clips
 from utils.cleanup import cleanup_files             
 from supabase import create_client, Client # type: ignore
 from services.video_service import trim_video_ffmpeg, trim_audio_ffmpeg
+from services.storage_service import upload_source_file
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -183,6 +184,10 @@ def _process_common(audio_path, user_id, tipo_fuente, url_o_nombre, es_anonimo, 
         else:
             log.info("¡Éxito anónimo! (No se guarda en DB)")
 
+        # Respaldo en Storage: para que el recorte de clips funcione
+        # aunque Render redeploye/reinicie el contenedor antes de que
+        # el usuario pida cortar un clip.
+        upload_source_file(audio_path, source_video_id)
 
         return {
             "status": "success",
