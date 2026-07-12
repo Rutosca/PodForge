@@ -386,7 +386,10 @@ def detect_clips(transcription: str) -> dict:
                 )
             )
 
-            response = model.generate_content(transcription)
+            response = model.generate_content(
+                transcription,
+                request_options={"timeout": 120},
+            )
             data = json.loads(response.text)
             log.info("✅ Detección de clips completada")
             return _normalize_clips(data)
@@ -499,7 +502,10 @@ def generate_copy(clip: dict, transcription: str, resumen_contexto: str = "") ->
                 )
             )
 
-            response = model.generate_content(context)
+            response = model.generate_content(
+                context,
+                request_options={"timeout": 120},
+            )
             data = json.loads(response.text)
 
             return {
@@ -675,7 +681,10 @@ def extract_ideas(transcription: str, resumen_contexto: str = "") -> dict:
                 )
             )
 
-            response = model.generate_content(contexto)
+            response = model.generate_content(
+                contexto,
+                request_options={"timeout": 120},
+            )
             data = json.loads(response.text)
 
             ideas = data.get("ideas", [])
