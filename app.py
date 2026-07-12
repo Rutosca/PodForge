@@ -584,6 +584,9 @@ import logging as _logging
 _worker_log = _logging.getLogger("rq.worker")
 
 class ThreadSafeWorker(Worker):
+    def _install_signal_handlers(self):
+        pass  # no se puede instalar señales fuera del hilo principal
+
     def execute_job(self, job, queue):
         try:
             super().execute_job(job, queue)
@@ -594,7 +597,7 @@ def run_worker():
     with app.app_context():
         try:
             worker = ThreadSafeWorker([queue], connection=redis_conn)
-            worker.work(with_scheduler=True, disable_default_signal_handlers=True)
+            worker.work()
         except Exception as e:
             _worker_log.error(f"Worker thread crashed: {e}")
 
