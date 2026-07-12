@@ -64,11 +64,14 @@ def trim_video_ffmpeg(source_video_id: str, start_time_sec: float, end_time_sec:
     log.info(f"🎬 Ejecutando FFmpeg: {' '.join(command)}")
 
     try:
-        # Ejecutamos comando
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=180)
         log.info(f"✅ Clip generado en: {output_path}")
         return output_filename
-        
+
+    except subprocess.TimeoutExpired:
+        log.error(f"❌ FFmpeg se colgó recortando vídeo (>180s): {source_path}")
+        raise RuntimeError("El recorte de vídeo tardó demasiado y se ha cancelado.")
+
     except subprocess.CalledProcessError as e:
         log.error(f"❌ Error en FFmpeg: {e.stderr}")
         raise RuntimeError(f"Fallo al recortar vídeo: {e.stderr}")
@@ -122,9 +125,12 @@ def trim_audio_ffmpeg(source_video_id: str, start_time_sec: float, end_time_sec:
     log.info(f"🎵 Recortando audio: {' '.join(command)}")
 
     try:
-        subprocess.run(command, capture_output=True, text=True, check=True)
+        subprocess.run(command, capture_output=True, text=True, check=True, timeout=180)
         log.info(f"✅ Audio clip generado: {output_path}")
         return output_filename
+    except subprocess.TimeoutExpired:
+        log.error(f"❌ FFmpeg se colgó recortando audio (>180s): {source_path}")
+        raise RuntimeError("El recorte de audio tardó demasiado y se ha cancelado.")
     except subprocess.CalledProcessError as e:
         log.error(f"❌ Error FFmpeg (audio): {e.stderr}")
         raise RuntimeError(f"Fallo al recortar audio: {e.stderr}")
