@@ -280,7 +280,9 @@ export async function generateCopy(
     throw new Error(data.error || `Error ${res.status}`)
   }
 
-  return res.json()
+  const { job_id } = await res.json()
+  const { promise } = pollUntilDone(job_id, () => {}, 1500)
+  return promise as unknown as Promise<CopyResult>
 }
 
 // ─── CRÉDITOS ───

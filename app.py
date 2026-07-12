@@ -258,46 +258,14 @@ def generar_copy(user_id, es_anonimo):
             "needs_login": True
         }), 429
 
-    try:
-        from services.llm_service import generate_copy
-        result = generate_copy(clip, transcripcion, resumen_contexto=resumen_contexto)
+    job = queue.enqueue(
+        'tasks.process_copy_generation',
+        clip, transcripcion, resumen_contexto, user_id, es_anonimo,
+        data.get("clip_id"), regen_key,
+        job_timeout=300
+    )
 
-        # Guardar el copy generado en la tabla copy_generado
-        if not es_anonimo and "error" not in result:
-            try:
-                # El frontend puede enviar el clip_id de Supabase si lo tiene
-                clip_id_supabase = data.get("clip_id")
-
-                # Si no lo tiene, intentar buscarlo por start_time + topic
-                if not clip_id_supabase:
-                    clip_lookup = supabase.table('clips') \
-                        .select('id') \
-                        .eq('id_usuario', user_id) \
-                        .eq('start_time', clip.get('start', '')) \
-                        .eq('topic', clip.get('topic', '')) \
-                        .limit(1) \
-                        .execute()
-                    if clip_lookup.data:
-                        clip_id_supabase = clip_lookup.data[0]['id']
-
-                if clip_id_supabase:
-                    supabase.table('copy_generado').insert({
-                        "clip_id": clip_id_supabase,
-                        "id_usuario": user_id,
-                        "titulo": result.get("titulo"),
-                        "caption": result.get("caption"),
-                        "hooks": result.get("hooks", []),
-                        "formato_recomendado": result.get("formato_recomendado"),
-                        "estructura_clip": result.get("estructura_clip", []),
-                    }).execute()
-                    log.info(f"Copy guardado en DB para clip {clip_id_supabase}")
-            except Exception as copy_err:
-                log.warning(f"No se pudo guardar copy en DB (no crítico): {copy_err}")
-
-        return jsonify(result)
-    except Exception as e:
-        redis_conn.decr(regen_key)
-        return jsonify({"error": str(e)}), 500
+    return jsonify({"job_id": job.id, "status": "queued"})
 
 
 @app.route("/extraer-ideas", methods=["POST"])

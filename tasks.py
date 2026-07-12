@@ -241,3 +241,50 @@ def process_clip_audio(source_video_id: str, start_time: float, end_time: float,
     except Exception as e:
         log.error(f"Error generando clip de audio: {e}")
         return {"error": str(e)}
+
+
+def process_copy_generation(clip, transcripcion, resumen_contexto, user_id, es_anonimo, clip_id_hint, regen_key):
+    """
+    Tarea de background: genera copy con Gemini y lo guarda en DB.
+    Se ejecuta en el worker de RQ, no en el proceso de gunicorn.
+    """
+    try:
+        from services.llm_service import generate_copy
+        result = generate_copy(clip, transcripcion, resumen_contexto=resumen_contexto)
+
+        # Guardar el copy generado en la tabla copy_generado
+        if not es_anonimo and "error" not in result:
+            try:
+                clip_id_supabase = clip_id_hint
+
+                if not clip_id_supabase:
+                    clip_lookup = supabase.table('clips') \
+                        .select('id') \
+                        .eq('id_usuario', user_id) \
+                        .eq('start_time', clip.get('start', '')) \
+                        .eq('topic', clip.get('topic', '')) \
+                        .limit(1) \
+                        .execute()
+                    if clip_lookup.data:
+                        clip_id_supabase = clip_lookup.data[0]['id']
+
+                if clip_id_supabase:
+                    supabase.table('copy_generado').insert({
+                        "clip_id": clip_id_supabase,
+                        "id_usuario": user_id,
+                        "titulo": result.get("titulo"),
+                        "caption": result.get("caption"),
+                        "hooks": result.get("hooks", []),
+                        "formato_recomendado": result.get("formato_recomendado"),
+                        "estructura_clip": result.get("estructura_clip", []),
+                    }).execute()
+                    log.info(f"Copy guardado en DB para clip {clip_id_supabase}")
+            except Exception as copy_err:
+                log.warning(f"No se pudo guardar copy en DB (no crítico): {copy_err}")
+
+        return result
+
+    except Exception as e:
+        redis_conn.decr(regen_key)
+        log.error(f"Error en process_copy_generation: {e}")
+        return {"error": str(e)}
