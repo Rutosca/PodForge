@@ -542,5 +542,33 @@ if Settings.ENV != "development":
         return jsonify({"status": "disabled"}), 403
 
 
+# --- ARRANQUE Y WORKER INTEGRADO ---
+
+import logging as _logging
+_worker_log = _logging.getLogger("rq.worker")
+
+class ThreadSafeWorker(Worker):
+    def _install_signal_handlers(self):
+        pass  # no se puede instalar señales fuera del hilo principal
+
+    def execute_job(self, job, queue):
+        try:
+            super().execute_job(job, queue)
+        except Exception as e:
+            _worker_log.error(f"Error en worker embebido ejecutando {job.id}: {e}")
+
+def run_worker():
+    with app.app_context():
+        try:
+            worker = ThreadSafeWorker([queue], connection=redis_conn)
+            worker.work()  # sin with_scheduler: no lo usamos, y forkear
+                            # el scheduler desde un hilo puede colgar el worker.
+        except Exception as e:
+            _worker_log.error(f"Worker thread crashed: {e}")
+
+worker_thread = threading.Thread(target=run_worker, daemon=True)
+worker_thread.start()
+
+
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000)
