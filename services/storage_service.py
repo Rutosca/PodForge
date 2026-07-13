@@ -75,3 +75,55 @@ def download_source_file(
 
     log.warning(f"No se encontró {source_video_id} en Storage con ninguna extensión.")
     return None
+
+
+CLIPS_BUCKET = "clip-previews"
+
+
+def upload_clip_file(local_path: str) -> str | None:
+    """
+    Sube un clip ya recortado (pequeño, cabe en el límite de 50MB) a su propio
+    bucket de Storage. A diferencia de upload_source_file, aquí la clave remota
+    es directamente el nombre de archivo del clip (ya es único: incluye su
+    propio uuid, p.ej. clip_<uuid>.mp4 / audioclip_<uuid>.mp3).
+    Devuelve el nombre remoto si tiene éxito, o None si falla.
+    """
+    if not os.path.isfile(local_path):
+        log.warning(f"upload_clip_file: el archivo no existe → {local_path}")
+        return None
+
+    remote_name = os.path.basename(local_path)
+
+    try:
+        with open(local_path, "rb") as f:
+            _supabase.storage.from_(CLIPS_BUCKET).upload(
+                path=remote_name,
+                file=f,
+                file_options={"upsert": "true"},
+            )
+        log.info(f"✅ Clip subido a Storage: {CLIPS_BUCKET}/{remote_name}")
+        return remote_name
+    except Exception as e:
+        # No es fatal: el clip ya se generó en disco, esto es solo respaldo.
+        log.error(f"⚠️ Fallo al subir clip a Storage: {e}")
+        return None
+
+
+def download_clip_file(clip_filename: str) -> str | None:
+    """
+    Descarga un clip ya recortado desde Storage a TEMP_DIR.
+    Se usa como fallback en /media/<filename> cuando el archivo ya
+    no está en disco local (p.ej. tras un redeploy).
+    Devuelve la ruta local si lo encuentra, o None si no existe en el bucket.
+    """
+    local_path = os.path.join(Settings.TEMP_DIR, clip_filename)
+
+    try:
+        data = _supabase.storage.from_(CLIPS_BUCKET).download(clip_filename)
+        with open(local_path, "wb") as f:
+            f.write(data)
+        log.info(f"✅ Clip recuperado de Storage: {CLIPS_BUCKET}/{clip_filename} → {local_path}")
+        return local_path
+    except Exception as e:
+        log.warning(f"No se encontró el clip {clip_filename} en Storage: {e}")
+        return None

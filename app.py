@@ -14,6 +14,7 @@ import uuid
 from supabase import create_client, Client # type: ignore
 from functools import wraps
 from utils.validators import is_valid_youtube_url
+from services.storage_service import download_clip_file
 
 import logging
 
@@ -533,6 +534,14 @@ def generar_video_clip(user_id, es_anonimo):
 @app.route("/media/<filename>", methods=["GET"])
 def serve_media(filename):
     safe_filename = secure_filename(filename)
+    local_path = os.path.join(Settings.TEMP_DIR, safe_filename)
+
+    if not os.path.isfile(local_path):
+        log.info(f"'{safe_filename}' no está en disco local, probando recuperar de Storage...")
+        recovered_path = download_clip_file(safe_filename)
+        if not recovered_path:
+            return jsonify({"error": "Archivo no encontrado"}), 404
+
     return send_from_directory(Settings.TEMP_DIR, safe_filename)
 
 

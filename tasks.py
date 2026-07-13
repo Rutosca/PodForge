@@ -12,7 +12,7 @@ from services.llm_service import detect_clips
 from utils.cleanup import cleanup_files             
 from supabase import create_client, Client # type: ignore
 from services.video_service import trim_video_ffmpeg, trim_audio_ffmpeg
-from services.storage_service import upload_source_file
+from services.storage_service import upload_clip_file
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -111,6 +111,64 @@ def process_file(file_path, user_id, es_anonimo, language: str | None = "es", or
             cleanup_files(file_path)
         return {"error": str(e)}
 
+def _parse_time_to_seconds(ts: str) -> float:
+    """
+    Convierte un timestamp 'MM:SS' o 'H:MM:SS' (formato que usa detect_clips)
+    a segundos, para poder pasarlo a trim_video_ffmpeg / trim_audio_ffmpeg.
+    """
+    try:
+        parts = str(ts).strip().split(":")
+        if len(parts) == 2:
+            return int(parts[0]) * 60 + int(parts[1])
+        elif len(parts) == 3:
+            return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+    except (ValueError, IndexError):
+        pass
+    return 0.0
+
+
+def _generate_clip_previews(clips: list, source_video_id: str, source_type: str) -> None:
+    """
+    Recorta automáticamente los clips con mayor viral_score (previsualización)
+    justo después del análisis, y añade 'media_url' a cada dict de clip
+    (in place; no hace falta reasignar radar["clips"] porque son los mismos objetos).
+
+    Si falla el recorte de un clip puntual (timestamps inválidos, duración > 120s,
+    etc.) se salta ese clip y se continúa con el resto: un solo fallo de FFmpeg
+    no debe tirar abajo el análisis completo.
+    """
+    if not clips or not source_video_id:
+        return
+
+    TOP_N_PREVIEWS = 5
+    top_clips = sorted(clips, key=lambda c: c.get("viral_score", 0), reverse=True)[:TOP_N_PREVIEWS]
+
+    for clip in top_clips:
+        try:
+            start_sec = _parse_time_to_seconds(clip.get("start", "00:00"))
+            end_sec = _parse_time_to_seconds(clip.get("end", "00:00"))
+
+            if end_sec <= start_sec:
+                log.warning(f"Preview omitido (tiempos inválidos): {clip.get('start')} → {clip.get('end')}")
+                continue
+
+            if source_type == "audio":
+                clip_filename = trim_audio_ffmpeg(source_video_id, start_sec, end_sec)
+            else:
+                clip_filename = trim_video_ffmpeg(source_video_id, start_sec, end_sec)
+
+            # Respaldo en Storage: a diferencia del original, el clip
+            # recortado sí cabe en el límite de 50MB del bucket.
+            upload_clip_file(os.path.join(Settings.TEMP_DIR, clip_filename))
+
+            clip["media_url"] = f"/media/{clip_filename}"
+            log.info(f"🎬 Preview generado para '{clip.get('topic', '?')}': {clip['media_url']}")
+
+        except Exception as e:
+            log.error(f"⚠️ No se pudo generar preview para clip '{clip.get('topic', '?')}': {e}")
+            continue
+
+
 def _process_common(audio_path, user_id, tipo_fuente, url_o_nombre, es_anonimo, language: str | None = "es", source_video_id: str | None = None, source_type: str = 'video'):
     compressed_audio = None
     try:
@@ -130,6 +188,9 @@ def _process_common(audio_path, user_id, tipo_fuente, url_o_nombre, es_anonimo, 
 
         log.info("Detectando clips virales (Fase 1)...")
         radar = detect_clips(transcription)
+
+        log.info("Generando previews de los clips top (recorte automático)...")
+        _generate_clip_previews(radar.get("clips", []), source_video_id, source_type)
 
         # Guardar en DB para usuarios registrados
         if not es_anonimo:
@@ -184,10 +245,7 @@ def _process_common(audio_path, user_id, tipo_fuente, url_o_nombre, es_anonimo, 
         else:
             log.info("¡Éxito anónimo! (No se guarda en DB)")
 
-        # Respaldo en Storage: para que el recorte de clips funcione
-        # aunque Render redeploye/reinicie el contenedor antes de que
-        # el usuario pida cortar un clip.
-        upload_source_file(audio_path, source_video_id)
+
 
         return {
             "status": "success",
