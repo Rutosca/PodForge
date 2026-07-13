@@ -401,8 +401,9 @@ def detect_clips(transcription: str) -> dict:
             error_msg = str(e)
             log.warning(f"Intento {attempt+1} falló: {error_msg}")
 
-            if "429" in error_msg or "Quota" in error_msg:
-                log.warning("Límite de cuota alcanzado, reintentando...")
+            # Reintentar en errores transitorios (cuota, timeouts, sobrecarga)
+            if any(kw in error_msg for kw in ("429", "Quota", "timed out", "timeout", "503", "overloaded")):
+                log.warning(f"Error transitorio, reintentando... ({error_msg[:80]})")
                 continue
 
             return _error_response(error_msg)
@@ -520,7 +521,7 @@ def generate_copy(clip: dict, transcription: str, resumen_contexto: str = "") ->
             error_msg = str(e)
             log.warning(f"Intento copy {attempt+1} falló: {error_msg}")
 
-            if "429" in error_msg or "Quota" in error_msg:
+            if any(kw in error_msg for kw in ("429", "Quota", "timed out", "timeout", "503", "overloaded")):
                 continue
 
             return {"error": error_msg}
@@ -705,7 +706,7 @@ def extract_ideas(transcription: str, resumen_contexto: str = "") -> dict:
             error_msg = str(e)
             log.warning(f"Intento ideas {attempt+1} falló: {error_msg}")
 
-            if "429" in error_msg or "Quota" in error_msg:
+            if any(kw in error_msg for kw in ("429", "Quota", "timed out", "timeout", "503", "overloaded")):
                 continue
 
             return {"error": error_msg, "ideas": []}

@@ -2,10 +2,8 @@ flask~=3.1
 redis~=5.0
 rq~=2.3
 yt-dlp>=2026.06.09
-groq~=0.25
 gunicorn~=23.0
 python-dotenv~=1.1
-ffmpeg-python~=0.2
 flask-limiter~=3.12
 google-genai
 supabase~=2.15

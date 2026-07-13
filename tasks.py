@@ -1,4 +1,5 @@
 import logging
+import gc
 from rq import Queue # type: ignore
 import os
 import httpx
@@ -8,7 +9,7 @@ from services.youtube_service import download_audio
 from services.audio_service import compress_audio
 from services.deepgram_service import transcribe_audio_deepgram
 from services.llm_service import detect_clips 
-from utils.cleanup import cleanup_files             
+from utils.cleanup import cleanup_files, cleanup_old_temp_files             
 from supabase import create_client, Client # type: ignore
 from services.video_service import trim_video_ffmpeg, trim_audio_ffmpeg
 from services.storage_service import upload_clip_file
@@ -139,7 +140,7 @@ def _generate_clip_previews(clips: list, source_video_id: str, source_type: str)
     if not clips or not source_video_id:
         return
 
-    TOP_N_PREVIEWS = 5
+    TOP_N_PREVIEWS = 3
     top_clips = sorted(clips, key=lambda c: c.get("viral_score", 0), reverse=True)[:TOP_N_PREVIEWS]
 
     for clip in top_clips:
@@ -156,9 +157,10 @@ def _generate_clip_previews(clips: list, source_video_id: str, source_type: str)
             else:
                 clip_filename = trim_video_ffmpeg(source_video_id, start_sec, end_sec)
 
-            # Respaldo en Storage: a diferencia del original, el clip
-            # recortado sí cabe en el límite de 50MB del bucket.
-            upload_clip_file(os.path.join(Settings.TEMP_DIR, clip_filename))
+            # Respaldo en Storage y luego borrar del disco local para liberar RAM/disco.
+            clip_path = os.path.join(Settings.TEMP_DIR, clip_filename)
+            upload_clip_file(clip_path)
+            cleanup_files(clip_path)
 
             clip["media_url"] = f"/media/{clip_filename}"
             log.info(f"🎬 Preview generado para '{clip.get('topic', '?')}': {clip['media_url']}")
@@ -166,6 +168,9 @@ def _generate_clip_previews(clips: list, source_video_id: str, source_type: str)
         except Exception as e:
             log.error(f"⚠️ No se pudo generar preview para clip '{clip.get('topic', '?')}': {e}")
             continue
+
+    # Liberar memoria tras los re-encodes de FFmpeg
+    gc.collect()
 
 
 def _process_common(audio_path, user_id, tipo_fuente, url_o_nombre, es_anonimo, language: str | None = "es", source_video_id: str | None = None, source_type: str = 'video'):
@@ -262,8 +267,10 @@ def _process_common(audio_path, user_id, tipo_fuente, url_o_nombre, es_anonimo, 
         log.error(f"Error en process_common: {e}")
         return {"error": str(e)}
     finally:
-        # Solo borramos el audio comprimido. El original lo guardamos para recortes (ffmpeg)
+        # Borramos el audio comprimido
         cleanup_files(compressed_audio)
+        # Limpieza agresiva de temporales viejos (>30 min) para liberar disco
+        cleanup_old_temp_files(max_age_minutes=30)
 
 def process_clip_video(source_video_id: str, start_time: float, end_time: float, user_id: str):
     """

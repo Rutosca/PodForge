@@ -12,7 +12,7 @@ def compress_audio(path: str):
     try:
         subprocess.run(
             [
-                "ffmpeg", "-y", "-i", path,
+                "ffmpeg", "-y", "-loglevel", "error", "-i", path,
                 "-vn", "-ar", "16000",
                 "-ac", "1", "-b:a", "32k",
                 output
