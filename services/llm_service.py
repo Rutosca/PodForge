@@ -386,7 +386,7 @@ def detect_clips(transcription: str) -> dict:
                     system_instruction=PROMPT_DETECTION,
                     temperature=0.4,
                     response_mime_type="application/json",
-                    http_options=types.HttpOptions(timeout=120000),
+                    http_options=types.HttpOptions(timeout=60000),
                 ),
             )
             data = json.loads(response.text)
@@ -500,7 +500,7 @@ def generate_copy(clip: dict, transcription: str, resumen_contexto: str = "") ->
                     system_instruction=PROMPT_COPY,
                     temperature=0.8,
                     response_mime_type="application/json",
-                    http_options=types.HttpOptions(timeout=120000),
+                    http_options=types.HttpOptions(timeout=60000),
                 ),
             )
             data = json.loads(response.text)
@@ -676,7 +676,7 @@ def extract_ideas(transcription: str, resumen_contexto: str = "") -> dict:
                     system_instruction=PROMPT_IDEAS,
                     temperature=0.75,
                     response_mime_type="application/json",
-                    http_options=types.HttpOptions(timeout=120000),
+                    http_options=types.HttpOptions(timeout=60000),
                 ),
             )
             data = json.loads(response.text)

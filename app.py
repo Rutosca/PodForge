@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, send_from_directory
 import threading
-from rq import Worker
+from rq import Worker, SimpleWorker
 from flask_cors import CORS
 from tasks import queue, process_youtube, process_file, process_clip_video
 from rq.job import Job # type: ignore
@@ -556,15 +556,11 @@ if Settings.ENV != "development":
 import logging as _logging
 _worker_log = _logging.getLogger("rq.worker")
 
-class ThreadSafeWorker(Worker):
+class ThreadSafeWorker(SimpleWorker):
+    """Worker que ejecuta jobs inline (sin fork ni señales).
+    Necesario porque corre en un hilo daemon, no en el main thread."""
     def _install_signal_handlers(self):
         pass  # no se puede instalar señales fuera del hilo principal
-
-    def execute_job(self, job, queue):
-        try:
-            super().execute_job(job, queue)
-        except Exception as e:
-            _worker_log.error(f"Error en worker embebido ejecutando {job.id}: {e}")
 
 def run_worker():
     with app.app_context():
