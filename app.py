@@ -1,6 +1,5 @@
 from flask import Flask, request, jsonify, send_from_directory
 import threading
-from rq import Worker, SimpleWorker
 from flask_cors import CORS
 from tasks import queue, process_youtube, process_file, process_clip_video
 from rq.job import Job # type: ignore
@@ -551,28 +550,7 @@ if Settings.ENV != "development":
         return jsonify({"status": "disabled"}), 403
 
 
-# --- ARRANQUE Y WORKER INTEGRADO ---
-
-import logging as _logging
-_worker_log = _logging.getLogger("rq.worker")
-
-class ThreadSafeWorker(SimpleWorker):
-    """Worker que ejecuta jobs inline (sin fork ni señales).
-    Necesario porque corre en un hilo daemon, no en el main thread."""
-    def _install_signal_handlers(self):
-        pass  # no se puede instalar señales fuera del hilo principal
-
-def run_worker():
-    with app.app_context():
-        try:
-            worker = ThreadSafeWorker([queue], connection=redis_conn)
-            worker.work()  # sin with_scheduler: no lo usamos, y forkear
-                            # el scheduler desde un hilo puede colgar el worker.
-        except Exception as e:
-            _worker_log.error(f"Worker thread crashed: {e}")
-
-worker_thread = threading.Thread(target=run_worker, daemon=True)
-worker_thread.start()
+# --- ARRANQUE ---
 
 
 if __name__ == "__main__":
