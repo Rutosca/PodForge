@@ -52,6 +52,7 @@ def trim_video_ffmpeg(source_video_id: str, start_time_sec: float, end_time_sec:
     command = [
         "ffmpeg", 
         "-y", # Sobrescribir sin preguntar
+        "-loglevel", "error", # Solo errores, no progreso frame a frame (ahorra memoria en capture_output)
         "-ss", str(start_time_sec), # Start time (antes de -i para fast seek)
         "-i", source_path, # Input
         "-t", str(duration), # Duration to cut (después de -i)
@@ -112,6 +113,7 @@ def trim_audio_ffmpeg(source_video_id: str, start_time_sec: float, end_time_sec:
     command = [
         "ffmpeg",
         "-y",
+        "-loglevel", "error",
         "-ss", str(start_time_sec),
         "-t", str(duration),
         "-i", source_path,

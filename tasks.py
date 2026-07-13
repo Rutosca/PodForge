@@ -6,8 +6,7 @@ from redis import Redis # type: ignore
 from config import Settings
 from services.youtube_service import download_audio
 from services.audio_service import compress_audio
-from services.groq_service import transcribe_audio 
-from services.deepgram_service import transcribe_audio_deepgram 
+from services.deepgram_service import transcribe_audio_deepgram
 from services.llm_service import detect_clips 
 from utils.cleanup import cleanup_files             
 from supabase import create_client, Client # type: ignore
