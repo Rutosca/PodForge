@@ -269,6 +269,8 @@ def _process_common(audio_path, user_id, tipo_fuente, url_o_nombre, es_anonimo, 
     finally:
         # Borramos el audio comprimido
         cleanup_files(compressed_audio)
+        # VITAL: Borramos el archivo original siempre para que el disco de Render no colapse
+        cleanup_files(audio_path)
         # Limpieza agresiva de temporales viejos (>30 min) para liberar disco
         cleanup_old_temp_files(max_age_minutes=30)
 
