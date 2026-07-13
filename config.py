@@ -22,7 +22,18 @@ class Settings:
     FORCE_IPV4 = os.getenv("FORCE_IPV4", "false").lower() == "true"
     YTDLP_MODE = os.getenv("YTDLP_MODE", "safe")
     
-    # --- 4. LIMITES Y FLASK ---
+    # --- 4. API KEYS (Groq) ---
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+    
+    # Lógica para limpiar la lista de keys separadas por comas
+    keys_str = os.getenv("GROQ_KEYS_LIST", "")
+    GROQ_KEYS_LIST = [k.strip() for k in keys_str.split(',') if k.strip()]
+    
+    # Si no hay lista pero sí una key suelta, la metemos en la lista
+    if not GROQ_KEYS_LIST and GROQ_API_KEY:
+        GROQ_KEYS_LIST = [GROQ_API_KEY]
+
+    # --- 5. LIMITES Y FLASK ---
     MAX_CONTENT_LENGTH = 500 * 1024 * 1024  # 500 MB de subida
     # Recuperamos estos límites que también usabas en tasks.py
     MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", 500))

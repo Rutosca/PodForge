@@ -25,7 +25,7 @@ export default function PodForgePage() {
   const [radarResult, setRadarResult] = useState<RadarResult | null>(null)
   const [videoUrl, setVideoUrl] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
-  const { refreshCredits, refreshHistory, user, remoteHistory } = useAuth()
+  const { refreshCredits, user } = useAuth()
 
   const handleNewAnalysis = () => {
     setCurrentView('input')
@@ -55,22 +55,12 @@ export default function PodForgePage() {
   }, [])
 
   const handleSelectHistory = useCallback((item: AnalysisHistoryItem) => {
-    // Intentar cargar desde localStorage primero
     const saved = loadResult(item.id) as RadarResult | null
-    if (saved) {
-      setVideoUrl(item.videoUrl || '')
-      setRadarResult(saved)
-      setCurrentView('results')
-      return
-    }
-    // Si no hay en localStorage, buscar en el historial remoto
-    const remoteItem = remoteHistory.find(r => r.id === item.id)
-    if (remoteItem?.resultado_json) {
-      setVideoUrl(item.videoUrl || '')
-      setRadarResult(remoteItem.resultado_json as RadarResult)
-      setCurrentView('results')
-    }
-  }, [remoteHistory])
+    if (!saved) return
+    setVideoUrl(item.videoUrl || '')
+    setRadarResult(saved)
+    setCurrentView('results')
+  }, [])
 
   const handleProcessingComplete = useCallback((result: RadarResult) => {
     setRadarResult(result)
@@ -107,14 +97,6 @@ export default function PodForgePage() {
         onSelectHistory={handleSelectHistory}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-        remoteHistory={remoteHistory}
-        onClearRemoteHistory={async () => {
-          if (user) {
-            const { clearRemoteHistory } = await import('@/lib/api')
-            await clearRemoteHistory()
-            await refreshHistory()
-          }
-        }}
       />
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto relative">

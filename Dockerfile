@@ -17,5 +17,5 @@ COPY . .
 
 ENV PYTHONUNBUFFERED=1
 
-RUN chmod +x start.sh
-CMD ["./start.sh"]
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:8000", "app:app"]
+

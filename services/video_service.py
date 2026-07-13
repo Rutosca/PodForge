@@ -3,7 +3,6 @@ import subprocess
 import uuid
 import logging
 from config import Settings
-from services.storage_service import download_source_file
 
 log = logging.getLogger(__name__)
 
@@ -24,20 +23,13 @@ def trim_video_ffmpeg(source_video_id: str, start_time_sec: float, end_time_sec:
 
     # 2. Encontrar el archivo original
     # Porque desconocemos la extensión exacta (.mp4, .webm, .mkv) del source
-    video_extensions = ['mp4', 'webm', 'mkv', 'm4a', 'ts', 'mov']
     source_path = None
-    for ext in video_extensions:
+    for ext in ['mp4', 'webm', 'mkv', 'm4a', 'ts', 'mov']:
         test_path = os.path.join(Settings.TEMP_DIR, f"{source_video_id}.{ext}")
         if os.path.exists(test_path):
             source_path = test_path
             break
-
-    # Fallback: si el contenedor se redesplegó y el disco local se vació,
-    # intenta recuperar el original desde el respaldo en Supabase Storage.
-    if not source_path:
-        log.info(f"No está en disco local, probando recuperar de Storage: {source_video_id}")
-        source_path = download_source_file(source_video_id, video_extensions)
-
+            
     if not source_path:
         raise FileNotFoundError("No se encontró el archivo de vídeo original en el servidor para recortarlo.")
 
@@ -47,32 +39,27 @@ def trim_video_ffmpeg(source_video_id: str, start_time_sec: float, end_time_sec:
     output_path = os.path.join(Settings.TEMP_DIR, output_filename)
 
     # 4. Construir comando FFmpeg
-    # Para evitar el desajuste de audio/vídeo (desync) que ocurre al usar "-c copy",
-    # necesitamos re-codificar el fragmento usando libx264.
+    # Usamos -ss ANTES de -i para que sea un seek súper rápido (fast seek), luego definimos la -t (duration)
+    # Copiamos codecs (-c copy) si es posible para no recodificar, es 100x más rápido. 
+    # OJO: -c copy a veces da "saltos" al inicio si no cae en un keyframe, pero para esta prueba MVP es perfecto.
     command = [
         "ffmpeg", 
         "-y", # Sobrescribir sin preguntar
-        "-loglevel", "error", # Solo errores, no progreso frame a frame (ahorra memoria en capture_output)
-        "-ss", str(start_time_sec), # Start time (antes de -i para fast seek)
+        "-ss", str(start_time_sec), # Start
+        "-t", str(duration), # Duration to cut
         "-i", source_path, # Input
-        "-t", str(duration), # Duration to cut (después de -i)
-        "-c:v", "libx264", # Re-encode video
-        "-preset", "superfast", # Codificación rápida
-        "-c:a", "aac", # Re-encode audio
+        "-c", "copy", # No re-encode (super fast)
         output_path
     ]
 
     log.info(f"🎬 Ejecutando FFmpeg: {' '.join(command)}")
 
     try:
-        result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=180)
+        # Ejecutamos comando
+        result = subprocess.run(command, capture_output=True, text=True, check=True)
         log.info(f"✅ Clip generado en: {output_path}")
         return output_filename
-
-    except subprocess.TimeoutExpired:
-        log.error(f"❌ FFmpeg se colgó recortando vídeo (>180s): {source_path}")
-        raise RuntimeError("El recorte de vídeo tardó demasiado y se ha cancelado.")
-
+        
     except subprocess.CalledProcessError as e:
         log.error(f"❌ Error en FFmpeg: {e.stderr}")
         raise RuntimeError(f"Fallo al recortar vídeo: {e.stderr}")
@@ -91,17 +78,12 @@ def trim_audio_ffmpeg(source_video_id: str, start_time_sec: float, end_time_sec:
         raise ValueError("Tiempos de recorte inválidos.")
 
     # Buscar el archivo original (audio subido por el usuario)
-    audio_extensions = ['mp3', 'm4a', 'wav', 'ogg', 'flac', 'aac', 'opus', 'weba', 'mp4', 'webm', 'mkv']
     source_path = None
-    for ext in audio_extensions:
+    for ext in ['mp3', 'm4a', 'wav', 'ogg', 'flac', 'aac', 'opus', 'weba', 'mp4', 'webm', 'mkv']:
         test_path = os.path.join(Settings.TEMP_DIR, f"{source_video_id}.{ext}")
         if os.path.exists(test_path):
             source_path = test_path
             break
-
-    if not source_path:
-        log.info(f"No está en disco local, probando recuperar de Storage: {source_video_id}")
-        source_path = download_source_file(source_video_id, audio_extensions)
 
     if not source_path:
         raise FileNotFoundError("No se encontró el archivo original en el servidor.")
@@ -113,7 +95,6 @@ def trim_audio_ffmpeg(source_video_id: str, start_time_sec: float, end_time_sec:
     command = [
         "ffmpeg",
         "-y",
-        "-loglevel", "error",
         "-ss", str(start_time_sec),
         "-t", str(duration),
         "-i", source_path,
@@ -127,12 +108,9 @@ def trim_audio_ffmpeg(source_video_id: str, start_time_sec: float, end_time_sec:
     log.info(f"🎵 Recortando audio: {' '.join(command)}")
 
     try:
-        subprocess.run(command, capture_output=True, text=True, check=True, timeout=180)
+        subprocess.run(command, capture_output=True, text=True, check=True)
         log.info(f"✅ Audio clip generado: {output_path}")
         return output_filename
-    except subprocess.TimeoutExpired:
-        log.error(f"❌ FFmpeg se colgó recortando audio (>180s): {source_path}")
-        raise RuntimeError("El recorte de audio tardó demasiado y se ha cancelado.")
     except subprocess.CalledProcessError as e:
         log.error(f"❌ Error FFmpeg (audio): {e.stderr}")
         raise RuntimeError(f"Fallo al recortar audio: {e.stderr}")

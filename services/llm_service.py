@@ -1,6 +1,5 @@
 # services/llm_service.py
-from google import genai
-from google.genai import types
+import google.generativeai as genai  # type: ignore
 import json
 import logging
 import os
@@ -8,9 +7,8 @@ import os
 log = logging.getLogger(__name__)
 api_key = os.getenv("GEMINI_API_KEY")
 if api_key:
-    client = genai.Client(api_key=api_key)
+    genai.configure(api_key=api_key)
 else:
-    client = None
     log.error("CRÍTICO: No se encontró GEMINI_API_KEY en el entorno.")
 
 
@@ -365,7 +363,7 @@ def calculate_viral_score(factors: dict, duration_seconds: int) -> int:
 def detect_clips(transcription: str) -> dict:
     """
     Fase 1 — Análisis determinista: detecta clips virales y calcula scores.
-    Motor: 
+    Motor: Gemini 2.5 Flash.
     """
     if not transcription:
         return _error_response("Transcripción vacía")
@@ -377,18 +375,18 @@ def detect_clips(transcription: str) -> dict:
 
     for attempt in range(MAX_RETRIES):
         try:
-            log.info(f"🧠 Intento {attempt+1}: Escaneando clips con Gemini...")
+            log.info(f"🧠 Intento {attempt+1}: Escaneando clips con Gemini 2.5 Flash...")
 
-            response = client.models.generate_content(
-                model="gemini-3.5-flash",
-                contents=transcription,
-                config=types.GenerateContentConfig(
-                    system_instruction=PROMPT_DETECTION,
+            model = genai.GenerativeModel(
+                model_name="gemini-2.5-flash",
+                system_instruction=PROMPT_DETECTION,
+                generation_config=genai.GenerationConfig(
                     temperature=0.4,
                     response_mime_type="application/json",
-                    http_options=types.HttpOptions(timeout=60000),
-                ),
+                )
             )
+
+            response = model.generate_content(transcription)
             data = json.loads(response.text)
             log.info("✅ Detección de clips completada")
             return _normalize_clips(data)
@@ -401,9 +399,8 @@ def detect_clips(transcription: str) -> dict:
             error_msg = str(e)
             log.warning(f"Intento {attempt+1} falló: {error_msg}")
 
-            # Reintentar en errores transitorios (cuota, timeouts, sobrecarga)
-            if any(kw in error_msg for kw in ("429", "Quota", "timed out", "timeout", "503", "overloaded")):
-                log.warning(f"Error transitorio, reintentando... ({error_msg[:80]})")
+            if "429" in error_msg or "Quota" in error_msg:
+                log.warning("Límite de cuota alcanzado, reintentando...")
                 continue
 
             return _error_response(error_msg)
@@ -493,16 +490,16 @@ def generate_copy(clip: dict, transcription: str, resumen_contexto: str = "") ->
         try:
             log.info(f"✍️ Generando copy — Intento {attempt+1}...")
 
-            response = client.models.generate_content(
-                model="gemini-3.1-flash",
-                contents=context,
-                config=types.GenerateContentConfig(
-                    system_instruction=PROMPT_COPY,
+            model = genai.GenerativeModel(
+                model_name="gemini-2.5-flash",
+                system_instruction=PROMPT_COPY,
+                generation_config=genai.GenerationConfig(
                     temperature=0.8,
                     response_mime_type="application/json",
-                    http_options=types.HttpOptions(timeout=60000),
-                ),
+                )
             )
+
+            response = model.generate_content(context)
             data = json.loads(response.text)
 
             return {
@@ -521,7 +518,7 @@ def generate_copy(clip: dict, transcription: str, resumen_contexto: str = "") ->
             error_msg = str(e)
             log.warning(f"Intento copy {attempt+1} falló: {error_msg}")
 
-            if any(kw in error_msg for kw in ("429", "Quota", "timed out", "timeout", "503", "overloaded")):
+            if "429" in error_msg or "Quota" in error_msg:
                 continue
 
             return {"error": error_msg}
@@ -669,16 +666,16 @@ def extract_ideas(transcription: str, resumen_contexto: str = "") -> dict:
         try:
             log.info(f"🧠 Idea Extraction — Intento {attempt+1}...")
 
-            response = client.models.generate_content(
-                model="gemini-3.1-flash",
-                contents=contexto,
-                config=types.GenerateContentConfig(
-                    system_instruction=PROMPT_IDEAS,
-                    temperature=0.75,
+            model = genai.GenerativeModel(
+                model_name="gemini-2.5-flash",
+                system_instruction=PROMPT_IDEAS,
+                generation_config=genai.GenerationConfig(
+                    temperature=0.75,         # Más alto que Fase 1: necesitamos creatividad editorial
                     response_mime_type="application/json",
-                    http_options=types.HttpOptions(timeout=60000),
-                ),
+                )
             )
+
+            response = model.generate_content(contexto)
             data = json.loads(response.text)
 
             ideas = data.get("ideas", [])
@@ -706,7 +703,7 @@ def extract_ideas(transcription: str, resumen_contexto: str = "") -> dict:
             error_msg = str(e)
             log.warning(f"Intento ideas {attempt+1} falló: {error_msg}")
 
-            if any(kw in error_msg for kw in ("429", "Quota", "timed out", "timeout", "503", "overloaded")):
+            if "429" in error_msg or "Quota" in error_msg:
                 continue
 
             return {"error": error_msg, "ideas": []}

@@ -280,9 +280,7 @@ export async function generateCopy(
     throw new Error(data.error || `Error ${res.status}`)
   }
 
-  const { job_id } = await res.json()
-  const { promise } = pollUntilDone(job_id, () => {}, 1500)
-  return promise as unknown as Promise<CopyResult>
+  return res.json()
 }
 
 // ─── CRÉDITOS ───
@@ -303,46 +301,5 @@ export async function fetchCredits(): Promise<CreditsInfo> {
     return res.json()
   } catch {
     return { remaining: 0, plan: 'FREE', unlimited: false }
-  }
-}
-
-// ─── HISTORIAL DESDE SUPABASE ───
-
-export interface RemoteHistoryItem {
-  id: string
-  title: string
-  date: string
-  status: 'completed'
-  clipsCount: number
-  videoUrl?: string | null
-  resultado_json: RadarResult
-}
-
-export async function fetchHistorial(): Promise<RemoteHistoryItem[]> {
-  try {
-    const authHeaders = await getAuthHeaders()
-    if (!authHeaders['Authorization']) return []
-
-    const res = await fetch('/api/historial', { headers: authHeaders })
-    if (!res.ok) return []
-
-    const data = await res.json()
-    return data.historial || []
-  } catch {
-    return []
-  }
-}
-
-export async function clearRemoteHistory(): Promise<void> {
-  const authHeaders = await getAuthHeaders()
-  if (!authHeaders['Authorization']) return
-
-  const res = await fetch('/api/historial', {
-    method: 'DELETE',
-    headers: authHeaders,
-  })
-  
-  if (!res.ok) {
-    throw new Error('Error al borrar historial remoto')
   }
 }

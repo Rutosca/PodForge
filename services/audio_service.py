@@ -12,7 +12,7 @@ def compress_audio(path: str):
     try:
         subprocess.run(
             [
-                "ffmpeg", "-y", "-loglevel", "error", "-i", path,
+                "ffmpeg", "-y", "-i", path,
                 "-vn", "-ar", "16000",
                 "-ac", "1", "-b:a", "32k",
                 output
@@ -23,7 +23,5 @@ def compress_audio(path: str):
             timeout=120  # 🔥 evita bloqueos
         )
         return output
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Audio compression failed, using original: {e}")
+    except:
         return path
