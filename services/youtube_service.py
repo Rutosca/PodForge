@@ -38,7 +38,7 @@ def get_ytdlp_config(cookie_path=None, video=False):
         }
     }
 
-    # --- PROXY 
+    #---PROXY 
     proxy_url = os.getenv("PROXY_URL")
     if proxy_url:
         config['proxy'] = proxy_url
