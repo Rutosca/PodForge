@@ -33,10 +33,14 @@ interface JobResponse {
   message?: string
 }
 
-interface StatusResponse {
+export interface StatusResponse {
   status: 'processing' | 'finished' | 'failed'
   result?: RadarResult
   error?: string
+  /** Progreso real (0-100) reportado por el worker */
+  progress?: number
+  /** Paso actual: download | extract | transcribe | analyze | detect | generate */
+  step?: string
 }
 
 // ─── FASE 1: ENVIAR VIDEO ───

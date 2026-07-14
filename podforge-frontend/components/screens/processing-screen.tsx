@@ -23,18 +23,33 @@ export function ProcessingScreen({ jobId, onComplete }: ProcessingScreenProps) {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<RadarResult | null>(null)
   const cancelRef = useRef<(() => void) | null>(null)
+  const hasRealProgressRef = useRef(false)
 
   // Polling real al backend
   useEffect(() => {
     const { promise, cancel } = pollUntilDone(
       jobId,
-      () => {
-        // Cada tick de polling, avanzamos un paso visual
-        setCurrentStepIndex(prev => {
-          const next = prev + 1
-          // No pasamos del penúltimo hasta que termine de verdad
-          return Math.min(next, processingSteps.length - 2)
-        })
+      (status) => {
+        // Progreso real reportado por el worker (job.meta)
+        if (typeof status.progress === 'number' && status.progress > 0) {
+          hasRealProgressRef.current = true
+          setProgress(prev => Math.max(prev, status.progress as number))
+        }
+        if (status.step) {
+          const stepIndex = processingSteps.findIndex(s => s.id === status.step)
+          if (stepIndex >= 0) {
+            setCurrentStepIndex(prev => Math.max(prev, stepIndex))
+          }
+        }
+
+        // Fallback: si el backend no reporta progreso, avanzamos un paso visual por tick
+        if (!hasRealProgressRef.current) {
+          setCurrentStepIndex(prev => {
+            const next = prev + 1
+            // No pasamos del penúltimo hasta que termine de verdad
+            return Math.min(next, processingSteps.length - 2)
+          })
+        }
       },
       2000
     )
@@ -56,14 +71,15 @@ export function ProcessingScreen({ jobId, onComplete }: ProcessingScreenProps) {
     return () => cancel()
   }, [jobId])
 
-  // Animar progreso basado en el step actual
+  // Fallback: animar progreso basado en el step actual solo si no hay progreso real
   useEffect(() => {
     if (isComplete) {
       setProgress(100)
       return
     }
+    if (hasRealProgressRef.current) return
     const targetProgress = ((currentStepIndex + 1) / processingSteps.length) * 90 // Max 90% hasta completar
-    setProgress(targetProgress)
+    setProgress(prev => Math.max(prev, targetProgress))
   }, [currentStepIndex, isComplete])
 
   const getStepStatus = (index: number): 'pending' | 'active' | 'completed' => {

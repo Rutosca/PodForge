@@ -1,5 +1,6 @@
 import logging
 from rq import Queue # type: ignore
+from rq.job import get_current_job # type: ignore
 import os
 import httpx
 from redis import Redis # type: ignore
@@ -22,6 +23,24 @@ queue = Queue(connection=redis_conn)
 supabase: Client = create_client(Settings.SUPABASE_URL, Settings.SUPABASE_SERVICE_KEY)
 
 from services.youtube_service import download_video_and_audio
+
+
+def _report_progress(step: str, progress: int):
+    """
+    Guarda el paso actual y el % de progreso en job.meta para que
+    el endpoint /status/<job_id> pueda devolver información real al frontend.
+    Los steps coinciden con los ids del frontend:
+    download, extract, transcribe, analyze, detect, generate
+    """
+    try:
+        job = get_current_job()
+        if job:
+            job.meta['step'] = step
+            job.meta['progress'] = progress
+            job.save_meta()
+    except Exception as e:
+        log.warning(f"No se pudo reportar progreso: {e}")
+
 
 def process_youtube(url, user_id, es_anonimo, language: str | None = "es"):
     #buscar en caché de bases de datos
@@ -48,6 +67,7 @@ def process_youtube(url, user_id, es_anonimo, language: str | None = "es"):
     try:
         
         log.info(f"Descargando YouTube (Vídeo max 720p para recortes): {url}")
+        _report_progress('download', 5)
         # Descargamos video+audio. Pesa más pero es necesario para la Feature de Recorte
         raw_video, err = download_video_and_audio(url)
         if err:
@@ -78,6 +98,7 @@ def process_youtube(url, user_id, es_anonimo, language: str | None = "es"):
 def process_file(file_path, user_id, es_anonimo, language: str | None = "es"):
     try:
         log.info(f"Procesando archivo local: {file_path}")
+        _report_progress('download', 10)
         video_id = os.path.basename(file_path).split('.')[0]
 
         # Detectar si es audio o vídeo por extensión
@@ -101,9 +122,11 @@ def _process_common(audio_path, user_id, tipo_fuente, url_o_nombre, es_anonimo, 
     compressed_audio = None
     try:
         log.info("Comprimiendo audio...")
+        _report_progress('extract', 30)
         compressed_audio = compress_audio(audio_path)
 
         log.info(f"Transcribiendo con Deepgram (idioma: {language or 'auto'})...")
+        _report_progress('transcribe', 45)
         transcription = transcribe_audio_deepgram(compressed_audio, language=language)
         
         if transcription.startswith("Error"):
@@ -114,9 +137,12 @@ def _process_common(audio_path, user_id, tipo_fuente, url_o_nombre, es_anonimo, 
             log.error(f"Fallo transcripción: {transcription}")
             return {"error": transcription}
 
+        _report_progress('analyze', 70)
         log.info("Detectando clips virales (Fase 1)...")
+        _report_progress('detect', 78)
         radar = detect_clips(transcription)
 
+        _report_progress('generate', 92)
         # Guardar en DB para usuarios registrados
         if not es_anonimo:
             try:
