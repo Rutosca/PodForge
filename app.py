@@ -315,7 +315,18 @@ def job_status(job_id):
     if job.is_finished:
         return jsonify({"status": "finished", "result": job.result})
 
-    return jsonify({"status": "processing"})
+    # Progreso real reportado por el worker via job.meta
+    try:
+        job.refresh()
+        meta = job.meta or {}
+    except Exception:
+        meta = {}
+
+    return jsonify({
+        "status": "processing",
+        "progress": meta.get("progress", 0),
+        "step": meta.get("step"),
+    })
 
 
 # --- CRÉDITOS ---
